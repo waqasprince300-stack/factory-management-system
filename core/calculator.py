@@ -34,13 +34,118 @@ def is_boring_tool(code: str, name: str) -> bool:
     return bool(re.search(r'\bboring\b', text, re.I))
 
 
+def compute_part_heads_config(target_name: str, repeat: float, machine_heads: int, part_dict: dict = None) -> dict:
+    """
+    Determines active heads, badge, and suit multiplier based on Pakistani factory rules:
+    - 9H / 4H Multi-color: multiple cloth colors combined on 1 repeat frame.
+      - 28H with 9H -> 3 colors (2 of 9 heads, 1 of 10 heads)
+      - 30H with 9H -> 3 colors of 10 heads each
+      - 28H with 4H -> 7 colors of 4 heads each
+      - 30H with 4H -> 7-8 colors (4H-5H each)
+      Stitches per suit = 100% (1 suit receives 1 full piece).
+    - Size split (S, M, L):
+      Half heads (14 on 28H, 15 on 30H).
+    - Double repeat:
+      Half heads (14 on 28H, 15 on 30H).
+    """
+    target = str(target_name or "")
+    part_d = part_dict or {}
+
+    size_tag = part_d.get("size_tag")
+    if not size_tag:
+        size_m = re.search(r'\(\s*([sml])\s*\)', target, re.I)
+        size_tag = size_m.group(1).upper() if size_m else None
+
+    tag_heads = part_d.get("tag_heads")
+    if not tag_heads:
+        head_m = re.search(r'\(\s*(\d+)\s*(?:h|head|heads)\b', target, re.I)
+        if not head_m:
+            head_m = re.search(r'\b(\d+)\s*(?:h|head|heads)\b', target, re.I)
+        tag_heads = int(head_m.group(1)) if head_m else None
+
+    is_size_split = bool(size_tag) or part_d.get("is_size_split", False)
+    is_multi_color = bool(tag_heads and tag_heads in range(2, 13) and not is_size_split)
+    is_double = (
+        (repeat >= 2.0) or
+        is_size_split or
+        part_d.get("is_double_repeat", False) or
+        bool(re.search(r'\b(double|14\s*h|14\s*head|15\s*h|15\s*head)\b', target, re.I))
+    )
+
+    def_h = max(1, machine_heads)
+
+    if is_multi_color and tag_heads:
+        colors_in_repeat = max(1, round(def_h / tag_heads))
+        base_h = def_h // colors_in_repeat
+        rem_h = def_h % colors_in_repeat
+
+        if rem_h == 0:
+            badge = f"⚡ {colors_in_repeat} Colors / Repeat ({base_h}H each)"
+            heads_display = f"{base_h}H"
+            heads_desc = f"{base_h} heads per color"
+        else:
+            c_base = colors_in_repeat - rem_h
+            c_ext = rem_h
+            h_ext = base_h + 1
+            badge = f"⚡ {colors_in_repeat} Colors / Repeat ({c_base}×{base_h}H + {c_ext}×{h_ext}H)"
+            heads_display = f"{base_h}H-{h_ext}H"
+            heads_desc = f"{c_base} colors of {base_h}H + {c_ext} color of {h_ext}H"
+
+        return {
+            "type": "multi_color",
+            "heads": base_h,
+            "badge": badge,
+            "badge_type": "multi",
+            "colors": colors_in_repeat,
+            "tag_heads": tag_heads,
+            "size_tag": None,
+            "suit_mult": repeat * 1.0,
+            "suit_multiplier": repeat * 1.0,
+            "heads_display": heads_display,
+            "heads_desc": heads_desc
+        }
+
+    elif is_double or is_size_split:
+        h = max(1, def_h // 2)
+        s_txt = f" (Size {size_tag})" if size_tag else ""
+        badge = f"⚡ {h}H Double{s_txt}"
+        return {
+            "type": "double",
+            "heads": h,
+            "badge": badge,
+            "badge_type": "double",
+            "colors": 1,
+            "tag_heads": tag_heads,
+            "size_tag": size_tag,
+            "suit_mult": repeat * (h / def_h),
+            "suit_multiplier": repeat * (h / def_h),
+            "heads_display": f"{h}H",
+            "heads_desc": f"{h} heads alternate repeat"
+        }
+
+    else:
+        return {
+            "type": "standard",
+            "heads": def_h,
+            "badge": "",
+            "badge_type": "standard",
+            "colors": 1,
+            "tag_heads": None,
+            "size_tag": None,
+            "suit_mult": repeat * 1.0,
+            "suit_multiplier": repeat * 1.0,
+            "heads_display": f"{def_h}H",
+            "heads_desc": f"{def_h} full machine heads"
+        }
+
+
 def aggregate_suit_parts(parts: dict, include_boring: bool = False, default_heads: int = DEFAULT_MACHINE_HEADS) -> tuple[int, int, float, dict]:
     """
     Sums up 1 Suit's total stitches, sequins, bobbin, and thread consumption across all parts.
-    Also tracks 1 Frame thread meters according to each part's active heads (e.g. 30 vs 15 heads).
-    When active heads is half (e.g. 15 on 30 head machine), 1 repeat on the machine produces 15 pieces,
-    so for 30 suits of that color, 2 repeats make 30 pieces (1.0 piece per suit).
-    Therefore: suit_mult = rep * (p_heads / default_heads).
+    Tracks 1 Frame thread meters according to each part's active heads:
+    - Multi-color repeat (e.g. 9H): 1 suit gets 1 full piece (suit_mult = 1.0). Same thread runs on 9H, Common thread runs on 28H.
+    - Size split (e.g. S, M, L) / Double-head: suit_mult = rep * (p_heads / def_h). Both Same and Common thread run on 14H.
+    - Standard part: suit_mult = rep * 1.0. All thread runs on 28H.
     """
     total_stitches = 0
     total_sequins = 0
@@ -55,10 +160,26 @@ def aggregate_suit_parts(parts: dict, include_boring: bool = False, default_head
         if p_heads <= 0:
             p_heads = def_h
 
-        # Effective pieces of this part in 1 complete suit
-        # E.g. Silk Front (2 R, 15 heads on 30 head machine): suit_mult = 2.0 * (15/30) = 1.0 piece
-        # Bazu (1.5 R, 30 heads on 30 head machine): suit_mult = 1.5 * (30/30) = 1.5 pieces
-        suit_mult = rep * (p_heads / def_h)
+        cfg = compute_part_heads_config(
+            f"{p.get('design_name', '')} {p.get('file_name', '')}",
+            rep,
+            def_h,
+            p
+        )
+        p_type = cfg["type"]
+
+        if p_type == "multi_color":
+            suit_mult = rep * 1.0
+            same_heads = p_heads
+            common_heads = def_h
+        elif p_type == "double" or (p_heads < def_h):
+            suit_mult = rep * (p_heads / def_h)
+            same_heads = p_heads
+            common_heads = p_heads
+        else:
+            suit_mult = rep * 1.0
+            same_heads = def_h
+            common_heads = def_h
 
         total_stitches += int(round(p.get("stitches", 0) * suit_mult))
         total_sequins += int(round(p.get("sequins_total", 0) * suit_mult))
@@ -73,6 +194,8 @@ def aggregate_suit_parts(parts: dict, include_boring: bool = False, default_head
             if is_boring_tool(raw_code, raw_name) and not include_boring:
                 continue
 
+            active_h = same_heads if is_same_color(raw_code, raw_name) else common_heads
+
             # Normalized representations (trim spaces, uppercase for comparison)
             norm_code = re.sub(r'\s+', ' ', raw_code).strip()
             norm_name = re.sub(r'\s+', ' ', raw_name).strip() or norm_code
@@ -80,34 +203,26 @@ def aggregate_suit_parts(parts: dict, include_boring: bool = False, default_head
             name_upper = norm_name.upper()
 
             # Find matching existing thread color:
-            # 1. Exact case-insensitive code match (e.g. 'pink' == 'Pink' == 'PINK')
-            # 2. Or same needle AND same description (e.g. Needle 2 and 'Tilla =6')
             target_key = None
             for ex_k, ex_info in colors_dict.items():
                 ex_code_upper = ex_info["code"].strip().upper()
                 ex_name_upper = ex_info["name"].strip().upper()
                 ex_needle = ex_info["needle"]
 
-                # Code match (if code is meaningful)
                 if code_upper and code_upper not in ("-", "NONE", "N/A", "NULL") and code_upper == ex_code_upper:
                     target_key = ex_k
                     break
 
-                # Same needle and same description
                 if needle == ex_needle and name_upper == ex_name_upper:
                     target_key = ex_k
                     break
 
-                # Same needle and code matches description or vice-versa
                 if needle == ex_needle and (code_upper == ex_name_upper or name_upper == ex_code_upper):
                     target_key = ex_k
                     break
 
             if not target_key:
-                # Use uppercase code or N{needle}_{name} as unique dict key
                 target_key = code_upper if (code_upper and code_upper not in ("-", "NONE", "N/A")) else f"N{needle}_{name_upper}"
-                
-                # Title-case lowercase word codes (e.g. 'pink' -> 'Pink', but keep '3084' as is)
                 display_code = norm_code.capitalize() if (norm_code.islower() and not norm_code.isdigit()) else norm_code
                 display_name = norm_name if norm_name else display_code
 
@@ -118,26 +233,23 @@ def aggregate_suit_parts(parts: dict, include_boring: bool = False, default_head
                     "is_same": is_same_color(raw_code, raw_name),
                     "meters_1_suit": 0.0,
                     "meters_1_frame": 0.0,
-                    "active_heads": p_heads
+                    "active_heads": active_h
                 }
             else:
-                # Upgrade display code if current is capitalized and existing was lowercase
                 cur_code = colors_dict[target_key]["code"]
                 if cur_code.islower() and not norm_code.islower():
                     colors_dict[target_key]["code"] = norm_code
 
-                # Upgrade display name if current has a better description
                 cur_name = colors_dict[target_key]["name"]
                 if (not cur_name or cur_name.upper() == code_upper) and norm_name and norm_name.upper() != code_upper:
                     colors_dict[target_key]["name"] = norm_name
 
-                # Retain is_same flag if any part marks it as same
                 if is_same_color(raw_code, raw_name):
                     colors_dict[target_key]["is_same"] = True
 
             colors_dict[target_key]["meters_1_suit"] += length_single * suit_mult
-            colors_dict[target_key]["meters_1_frame"] += length_single * p_heads
-            colors_dict[target_key]["active_heads"] = max(colors_dict[target_key].get("active_heads", 0), p_heads)
+            colors_dict[target_key]["meters_1_frame"] += length_single * active_h
+            colors_dict[target_key]["active_heads"] = max(colors_dict[target_key].get("active_heads", 0), active_h)
 
     return total_stitches, total_sequins, total_bobbin_m, colors_dict
 
@@ -281,14 +393,27 @@ def calculate_full_production(
             if p_heads <= 0:
                 p_heads = machine_heads
 
-            # Repeats (Chakar) needed for this part:
-            # In Pakistani embroidery factories, p_rep is the machine repeats per color.
-            # E.g. Silk Bazu (1.5 R) -> 1.5 * 6 = 9 Repeats (1.5 / color)
-            # Silk Front (2 R, 15H Double Head) -> 2.0 * 6 = 12 Repeats (2.0 / color)
-            # Velvet Patches (1 R) -> 1.0 * 6 = 6 Repeats (1.0 / color)
             def_h = max(1, machine_heads)
-            p_runs = math.ceil(p_rep * (num_pieces / def_h))
-            p_runs_per_color = round(p_rep * (suits_per_base_color / def_h), 1)
+            cfg = compute_part_heads_config(
+                f"{p.get('design_name', '')} {p.get('file_name', '')}",
+                p_rep,
+                machine_heads,
+                p
+            )
+
+            # Machine repeats (Chakar) needed for this part:
+            if cfg["type"] == "multi_color":
+                # Multi-color repeat: all machine heads run simultaneously across colors.
+                p_runs = math.ceil(p_rep * (num_pieces / def_h))
+                colors_in_rep = cfg.get("colors", 3)
+                p_runs_per_color = round(p_rep * (suits_per_base_color / (def_h / colors_in_rep)), 1)
+            elif cfg["type"] == "double" or p_heads < def_h:
+                # Alternate/Double head repeat (14 on 28H, 15 on 30H)
+                p_runs = math.ceil(p_rep * (num_pieces / p_heads))
+                p_runs_per_color = round(p_rep * (suits_per_base_color / p_heads), 1)
+            else:
+                p_runs = math.ceil(p_rep * (num_pieces / def_h))
+                p_runs_per_color = round(p_rep * (suits_per_base_color / def_h), 1)
 
             # Timing for this part
             p_mins_per_batch = (p_st / effective_spm) if effective_spm > 0 else 0
@@ -303,7 +428,9 @@ def calculate_full_production(
                 "heads": p_heads,
                 "runs": p_runs,
                 "runs_per_color": p_runs_per_color,
-                "hours": round(p_batch_hours, 1)
+                "hours": round(p_batch_hours, 1),
+                "badge": cfg.get("badge", ""),
+                "badge_type": cfg.get("badge_type", "standard")
             }
 
         shifts_needed = round(total_hours / shift_hours, 1) if shift_hours > 0 else 0

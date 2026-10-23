@@ -22,13 +22,11 @@ import core.config
 import core.security
 import core.parser
 import core.calculator
-import core.demo
 
 importlib.reload(core.config)
 importlib.reload(core.security)
 importlib.reload(core.parser)
 importlib.reload(core.calculator)
-importlib.reload(core.demo)
 
 # Modular Core Imports
 from core.config import (
@@ -47,9 +45,9 @@ from core.security import validate_uploaded_file
 from core.parser import parse_wilcom_pdf, parse_image_part
 from core.calculator import (
     aggregate_suit_parts,
-    calculate_full_production
+    calculate_full_production,
+    compute_part_heads_config
 )
-from core.demo import get_demo_parts
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PAGE CONFIGURATION
@@ -516,6 +514,16 @@ div[data-testid="stHorizontalBlock"] {{
     font-weight: 700;
     display: inline-block;
 }}
+.badge-multi-erp {{
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    color: #059669;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    display: inline-block;
+}}
 
 /* Surface Container */
 .card-surface {{
@@ -871,13 +879,21 @@ if uploaded_files:
                     sub_h = f"{h}_{idx}" if len(parsed_parts) > 1 else h
                     if sub_h not in st.session_state.parts:
                         part_data["hash"] = sub_h
-                        if "heads" not in part_data:
-                            is_double = (
-                                part_data.get("repeat", 1.0) >= 2.0 or
-                                part_data.get("is_double_repeat", False) or
-                                bool(re.search(r'\b(double|14\s*h|14\s*head)\b', f"{fname} {part_data.get('design_name', '')}", re.I))
-                            )
-                            part_data["heads"] = max(1, st.session_state.saved_heads // 2) if is_double else st.session_state.saved_heads
+                        part_data["file_name"] = fname
+                        cfg = compute_part_heads_config(
+                            f"{fname} {part_data.get('design_name', '')}",
+                            part_data.get("repeat", 1.0),
+                            st.session_state.saved_heads,
+                            part_data
+                        )
+                        part_data["heads"] = cfg["heads"]
+                        part_data["type"] = cfg["type"]
+                        part_data["colors_in_repeat"] = cfg.get("colors", 1)
+                        part_data["tag_heads"] = cfg.get("tag_heads")
+                        part_data["size_tag"] = cfg.get("size_tag")
+                        part_data["is_size_split"] = bool(cfg.get("size_tag"))
+                        part_data["is_multi_color"] = (cfg["type"] == "multi_color")
+                        part_data["is_double_repeat"] = (cfg["type"] == "double")
                         st.session_state.parts[sub_h] = part_data
             except Exception as e:
                 st.error(f"PDF error {fname}: {e}")
@@ -886,13 +902,21 @@ if uploaded_files:
                 try:
                     data = parse_image_part(c, fname)
                     data["hash"] = h
-                    if "heads" not in data:
-                        is_double = (
-                            data.get("repeat", 1.0) >= 2.0 or
-                            data.get("is_double_repeat", False) or
-                            bool(re.search(r'\b(double|14\s*h|14\s*head)\b', f"{fname} {data.get('design_name', '')}", re.I))
-                        )
-                        data["heads"] = max(1, st.session_state.saved_heads // 2) if is_double else st.session_state.saved_heads
+                    data["file_name"] = fname
+                    cfg = compute_part_heads_config(
+                        f"{fname} {data.get('design_name', '')}",
+                        data.get("repeat", 1.0),
+                        st.session_state.saved_heads,
+                        data
+                    )
+                    data["heads"] = cfg["heads"]
+                    data["type"] = cfg["type"]
+                    data["colors_in_repeat"] = cfg.get("colors", 1)
+                    data["tag_heads"] = cfg.get("tag_heads")
+                    data["size_tag"] = cfg.get("size_tag")
+                    data["is_size_split"] = bool(cfg.get("size_tag"))
+                    data["is_multi_color"] = (cfg["type"] == "multi_color")
+                    data["is_double_repeat"] = (cfg["type"] == "double")
                     st.session_state.parts[h] = data
                 except Exception as e:
                     st.error(f"Image error {fname}: {e}")
@@ -905,11 +929,6 @@ if not st.session_state.parts:
         <div style="font-size:0.8rem; max-width:520px; margin:0 auto; line-height:1.5; margin-bottom:12px;">Upar apni Wilcom PDF production worksheet ya design images upload karein taake cut-sheet aur cones calculation shuru ho sakay.</div>
     </div>
     """)
-    c_dm1, c_dm2, c_dm3 = st.columns([1, 1.8, 1])
-    with c_dm2:
-        if st.button("✨ Load Factory Demo Data (ZB-1149 Suit)", use_container_width=True):
-            st.session_state.parts = get_demo_parts(default_heads=st.session_state.saved_heads)
-            st.rerun()
     st.stop()
 
 
@@ -934,9 +953,23 @@ with cp1:
         st.session_state.saved_heads = machine_heads
         st.query_params["heads"] = str(machine_heads)
         if "parts" in st.session_state:
-            for p in st.session_state.parts.values():
-                if p.get("heads") == old_h:
-                    p["heads"] = machine_heads
+            for k, p in st.session_state.parts.items():
+                cfg = compute_part_heads_config(
+                    f"{p.get('design_name', '')} {p.get('file_name', '')}",
+                    float(p.get("repeat", 1.0)),
+                    machine_heads,
+                    p
+                )
+                p["heads"] = cfg["heads"]
+                p["type"] = cfg["type"]
+                p["colors_in_repeat"] = cfg.get("colors", 1)
+                p["tag_heads"] = cfg.get("tag_heads")
+                p["size_tag"] = cfg.get("size_tag")
+                p["is_size_split"] = bool(cfg.get("size_tag"))
+                p["is_multi_color"] = (cfg["type"] == "multi_color")
+                p["is_double_repeat"] = (cfg["type"] == "double")
+                if f"heads_g_{k}" in st.session_state:
+                    st.session_state[f"heads_g_{k}"] = cfg["heads"]
         st.rerun()
 
 with cp2:
@@ -1055,14 +1088,40 @@ st.html('<div class="section-tag" style="margin-top:0.4rem;">PARTS CUT-SHEET & R
 part_keys = list(st.session_state.parts.keys())
 to_delete = None
 
-total_preview_st = sum(
-    int(round(p['stitches'] * (float(p.get('repeat', 1.0)) * (int(p.get('heads', def_h)) / def_h))))
-    for p in st.session_state.parts.values()
-)
-total_order_runs_preview = sum(
-    math.ceil(float(p.get("repeat", 1.0)) * (num_pieces / def_h))
-    for p in st.session_state.parts.values()
-)
+# Pre-sync any values entered into widget keys so calculations, badges,
+# and summary headers reflect the latest user input on the current rerun!
+for k in part_keys:
+    rep_key = f"rep_g_{k}"
+    heads_key = f"heads_g_{k}"
+    if rep_key in st.session_state:
+        try:
+            st.session_state.parts[k]["repeat"] = float(st.session_state[rep_key])
+        except (ValueError, TypeError):
+            pass
+    if heads_key in st.session_state:
+        try:
+            st.session_state.parts[k]["heads"] = int(st.session_state[heads_key])
+        except (ValueError, TypeError):
+            pass
+
+total_preview_st = 0
+total_order_runs_preview = 0
+for p in st.session_state.parts.values():
+    p_rep = float(p.get("repeat", 1.0))
+    p_h = int(p.get("heads", def_h))
+    cfg = compute_part_heads_config(
+        f"{p.get('design_name', '')} {p.get('file_name', '')}",
+        p_rep,
+        machine_heads,
+        p
+    )
+    total_preview_st += int(round(p.get("stitches", 0) * cfg["suit_mult"]))
+    if cfg["type"] == "multi_color":
+        total_order_runs_preview += math.ceil(p_rep * (num_pieces / def_h))
+    elif cfg["type"] == "double" or p_h < def_h:
+        total_order_runs_preview += math.ceil(p_rep * (num_pieces / p_h))
+    else:
+        total_order_runs_preview += math.ceil(p_rep * (num_pieces / def_h))
 
 # Cut-sheet Header Bar
 st.html(f"""
@@ -1082,19 +1141,25 @@ for i in range(0, len(part_keys), 2):
     h_l = part_keys[i]
     p_l = st.session_state.parts[h_l]
     badge_l = "IMG" if p_l.get("is_image") else "PDF"
-    cur_rep_l = float(p_l.get("repeat", 1.0))
-    cur_heads_l = int(p_l.get("heads", machine_heads))
+    cur_rep_l = float(st.session_state.get(f"rep_g_{h_l}", p_l.get("repeat", 1.0)))
+    cur_heads_l = int(st.session_state.get(f"heads_g_{h_l}", p_l.get("heads", machine_heads)))
     if cur_heads_l <= 0:
         cur_heads_l = machine_heads
+
+    cfg_l = compute_part_heads_config(
+        f"{p_l.get('design_name', '')} {p_l.get('file_name', '')}",
+        cur_rep_l,
+        machine_heads,
+        p_l
+    )
 
     with col_c_left:
         c_info, c_in_rep, c_in_heads, c_in_sub, c_in_del = st.columns([3.3, 1.7, 1.7, 2.7, 0.6])
         with c_info:
-            is_dbl_l = (cur_heads_l < machine_heads) or (cur_rep_l >= 2.0) or ("double" in p_l.get("design_name", "").lower())
-            dbl_notice_l = f'<span class="badge-double-erp">⚡ {cur_heads_l}H Double</span>' if is_dbl_l else ""
+            badge_notice_l = f'<span class="badge-{cfg_l["badge_type"]}-erp">{cfg_l["badge"]}</span>' if cfg_l["badge"] else ""
             st.html(f"""
             <div style="padding-top:2px;">
-                <span class="badge-common-erp">{badge_l}</span> {dbl_notice_l}
+                <span class="badge-common-erp">{badge_l}</span> {badge_notice_l}
                 <div style="font-size:0.78rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="{p_l['design_name']}">{p_l['design_name']}</div>
                 <div style="font-size:0.68rem; color:var(--text-secondary); font-family:'JetBrains Mono',monospace;">{p_l['stitches']:,} st</div>
             </div>
@@ -1123,22 +1188,35 @@ for i in range(0, len(part_keys), 2):
                 step=1,
                 key=f"heads_g_{h_l}",
                 label_visibility="collapsed",
-                help="Active Heads (maslan 14 heads for double repeat)"
+                help=cfg_l.get("heads_desc", "Active Heads on Machine")
             )
             st.session_state.parts[h_l]["heads"] = new_heads_l
         with c_in_sub:
             def_h = max(1, machine_heads)
-            suit_mult_l = new_rep_l * (new_heads_l / def_h)
+            suit_mult_l = cfg_l["suit_mult"]
             st_calc_l = int(round(p_l['stitches'] * suit_mult_l))
-            p_runs_l = math.ceil(new_rep_l * (num_pieces / def_h))
-            p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / def_h), 1)
+
+            if cfg_l["type"] == "multi_color":
+                p_runs_l = math.ceil(new_rep_l * (num_pieces / def_h))
+                colors_in_rep_l = cfg_l.get("colors", 3)
+                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / (def_h / colors_in_rep_l)), 1)
+                sub_badge_text_l = f"({colors_in_rep_l} clr/frame)"
+            elif cfg_l["type"] == "double" or new_heads_l < def_h:
+                p_runs_l = math.ceil(new_rep_l * (num_pieces / new_heads_l))
+                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / new_heads_l), 1)
+                sub_badge_text_l = f"({p_runs_clr_l:g}/clr)"
+            else:
+                p_runs_l = math.ceil(new_rep_l * (num_pieces / def_h))
+                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / def_h), 1)
+                sub_badge_text_l = f"({p_runs_clr_l:g}/clr)"
+
             st.html(f"""
             <div style="padding-top:2px;">
                 <div style="font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; color:var(--accent-amber);">
                     = {st_calc_l:,} st
                 </div>
                 <div style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;">
-                    {p_runs_l} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">({p_runs_clr_l:g}/clr)</span>
+                    {p_runs_l} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">{sub_badge_text_l}</span>
                 </div>
             </div>
             """)
@@ -1152,19 +1230,25 @@ for i in range(0, len(part_keys), 2):
         h_r = part_keys[i + 1]
         p_r = st.session_state.parts[h_r]
         badge_r = "IMG" if p_r.get("is_image") else "PDF"
-        cur_rep_r = float(p_r.get("repeat", 1.0))
-        cur_heads_r = int(p_r.get("heads", machine_heads))
+        cur_rep_r = float(st.session_state.get(f"rep_g_{h_r}", p_r.get("repeat", 1.0)))
+        cur_heads_r = int(st.session_state.get(f"heads_g_{h_r}", p_r.get("heads", machine_heads)))
         if cur_heads_r <= 0:
             cur_heads_r = machine_heads
+
+        cfg_r = compute_part_heads_config(
+            f"{p_r.get('design_name', '')} {p_r.get('file_name', '')}",
+            cur_rep_r,
+            machine_heads,
+            p_r
+        )
 
         with col_c_right:
             c_info_r, c_in_rep_r, c_in_heads_r, c_in_sub_r, c_in_del_r = st.columns([3.3, 1.7, 1.7, 2.7, 0.6])
             with c_info_r:
-                is_dbl_r = (cur_heads_r < machine_heads) or (cur_rep_r >= 2.0) or ("double" in p_r.get("design_name", "").lower())
-                dbl_notice_r = f'<span class="badge-double-erp">⚡ {cur_heads_r}H Double</span>' if is_dbl_r else ""
+                badge_notice_r = f'<span class="badge-{cfg_r["badge_type"]}-erp">{cfg_r["badge"]}</span>' if cfg_r["badge"] else ""
                 st.html(f"""
                 <div style="padding-top:2px;">
-                    <span class="badge-same-erp">{badge_r}</span> {dbl_notice_r}
+                    <span class="badge-same-erp">{badge_r}</span> {badge_notice_r}
                     <div style="font-size:0.78rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="{p_r['design_name']}">{p_r['design_name']}</div>
                     <div style="font-size:0.68rem; color:var(--text-secondary); font-family:'JetBrains Mono',monospace;">{p_r['stitches']:,} st</div>
                 </div>
@@ -1193,22 +1277,35 @@ for i in range(0, len(part_keys), 2):
                     step=1,
                     key=f"heads_g_{h_r}",
                     label_visibility="collapsed",
-                    help="Active Heads (maslan 14 heads for double repeat)"
+                    help=cfg_r.get("heads_desc", "Active Heads on Machine")
                 )
                 st.session_state.parts[h_r]["heads"] = new_heads_r
             with c_in_sub_r:
                 def_h = max(1, machine_heads)
-                suit_mult_r = new_rep_r * (new_heads_r / def_h)
+                suit_mult_r = cfg_r["suit_mult"]
                 st_calc_r = int(round(p_r['stitches'] * suit_mult_r))
-                p_runs_r = math.ceil(new_rep_r * (num_pieces / def_h))
-                p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / def_h), 1)
+
+                if cfg_r["type"] == "multi_color":
+                    p_runs_r = math.ceil(new_rep_r * (num_pieces / def_h))
+                    colors_in_rep_r = cfg_r.get("colors", 3)
+                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / (def_h / colors_in_rep_r)), 1)
+                    sub_badge_text_r = f"({colors_in_rep_r} clr/frame)"
+                elif cfg_r["type"] == "double" or new_heads_r < def_h:
+                    p_runs_r = math.ceil(new_rep_r * (num_pieces / new_heads_r))
+                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / new_heads_r), 1)
+                    sub_badge_text_r = f"({p_runs_clr_r:g}/clr)"
+                else:
+                    p_runs_r = math.ceil(new_rep_r * (num_pieces / def_h))
+                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / def_h), 1)
+                    sub_badge_text_r = f"({p_runs_clr_r:g}/clr)"
+
                 st.html(f"""
                 <div style="padding-top:2px;">
                     <div style="font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; color:var(--accent-amber);">
                         = {st_calc_r:,} st
                     </div>
                     <div style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;">
-                        {p_runs_r} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">({p_runs_clr_r:g}/clr)</span>
+                        {p_runs_r} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">{sub_badge_text_r}</span>
                     </div>
                 </div>
                 """)
@@ -1533,22 +1630,28 @@ with tab_cost:
     col_fc1, col_fc2 = st.columns([1.1, 0.9])
 
     with col_fc1:
-        # Part-by-part breakdown rows
         parts_rows_html = ""
         def_h = max(1, machine_heads)
+        part_runs = results.get("part_runs_details", {})
         for h, p in st.session_state.parts.items():
             rep = float(p.get('repeat', 1.0))
             heads = int(p.get('heads', machine_heads))
-            suit_mult = rep * (heads / def_h)
-            p_runs = math.ceil(rep * (num_pieces / def_h))
+            cfg = compute_part_heads_config(
+                f"{p.get('design_name', '')} {p.get('file_name', '')}",
+                rep,
+                machine_heads,
+                p
+            )
+            suit_mult = cfg["suit_multiplier"]
+            p_runs = part_runs.get(h, {}).get("runs", math.ceil(rep * (num_pieces / def_h)))
             p_st_single = int(round(p.get('stitches', 0)))
             p_st_total = int(round(p_st_single * suit_mult))
             p_cost = (p_st_total / 1000.0) * stitch_rate
-            dbl_badge = ' <span class="badge-double-erp">Double</span>' if heads < machine_heads else ""
+            badge_html = f' <span class="badge-{cfg["badge_type"]}-erp">{cfg["badge"]}</span>' if cfg.get("badge") else ""
             parts_rows_html += f"""
             <tr style="border-bottom:1px solid var(--border-main);">
                 <td style="padding:6px 4px;">
-                    <strong style="color:var(--text-primary);">{p.get('design_name', 'Part')}</strong>{dbl_badge}
+                    <strong style="color:var(--text-primary);">{p.get('design_name', 'Part')}</strong>{badge_html}
                     <div style="font-size:0.68rem; color:var(--text-secondary);">{p_st_single:,} st × {rep:g} rep</div>
                 </td>
                 <td style="text-align:center; font-family:'JetBrains Mono',monospace; padding:6px 4px; color:var(--text-primary);">

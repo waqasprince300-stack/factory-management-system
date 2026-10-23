@@ -1,6 +1,9 @@
 """
 Document & Image Parsers for Wilcom Worksheets.
 Extracts stitches, dimensions, repeats, bobbin, sequins, and thread table.
+Auto-detects:
+- Multi-color repeat grouping (e.g. 9 Head / 4 Head)
+- Size-split / Double repeat (e.g. S, M, L)
 """
 
 import io
@@ -9,6 +12,45 @@ import pdfplumber
 from PIL import Image, ImageOps
 from core.config import MAX_PDF_PAGES
 from core.security import sanitize_filename
+
+
+def extract_part_attributes(name: str, repeat: float = 1.0) -> dict:
+    """
+    Extracts size split, multi-color head tags, and double repeat flags from design/file name:
+    - Multi-color repeat: e.g. '(9 H)', '(4 Head)' -> tag_heads=9/4, is_multi_color_repeat=True
+    - Size split: e.g. '(S)', '(M)', '(L)' -> size_tag='S'/'M'/'L', is_size_split=True, is_double_repeat=True
+    - Double repeat: 2 R, 14H, 15H, 'double', or size split
+    """
+    target = str(name or "")
+
+    # 1. Size split in brackets: (S), (M), (L)
+    size_m = re.search(r'\(\s*([sml])\s*\)', target, re.I)
+    size_tag = size_m.group(1).upper() if size_m else None
+
+    # 2. Head tag in brackets or word: (9 H), (9 Head), (4 H), (4 Head), 9H, 4H
+    head_m = re.search(r'\(\s*(\d+)\s*(?:h|head|heads)\b', target, re.I)
+    if not head_m:
+        head_m = re.search(r'\b(\d+)\s*(?:h|head|heads)\b', target, re.I)
+    tag_heads = int(head_m.group(1)) if head_m else None
+
+    is_size_split = bool(size_tag)
+    # Multi-color repeat tag: heads between 2 and 12 (not half heads 14/15)
+    is_multi_color_repeat = bool(tag_heads and tag_heads in range(2, 13) and not is_size_split)
+
+    # Double repeat: 2 R, 14H, 15H, 'double', or size split (S, M, L)
+    is_double_repeat = (
+        (repeat >= 2.0) or
+        is_size_split or
+        bool(re.search(r'\b(double|14\s*h|14\s*head|15\s*h|15\s*head)\b', target, re.I))
+    )
+
+    return {
+        "size_tag": size_tag,
+        "tag_heads": tag_heads,
+        "is_size_split": is_size_split,
+        "is_multi_color_repeat": is_multi_color_repeat,
+        "is_double_repeat": is_double_repeat
+    }
 
 
 def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
@@ -37,7 +79,7 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
         total_bobbin_m *= 0.3048
 
     # Auto-detect Repeat (e.g. "1 R", "Half R", "2 R", "Double R", "Double Repeat")
-    target_name = design_name or clean_name
+    target_name = f"{design_name or ''} {clean_name}"
     repeat = 1.0
     rep_m = re.search(r'\(\s*(\d+(?:\.\d+)?|\bhalf\b|\bdouble\b)?\s*(?:\+?\s*(half|double))?\s*r(?:epeat)?\s*\)', target_name, re.I)
     if rep_m:
@@ -62,7 +104,7 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
     elif re.search(r'\bdouble\s*repeat\b', target_name, re.I):
         repeat = 2.0
 
-    is_double_repeat = (repeat >= 2.0) or bool(re.search(r'\b(double|14\s*h|14\s*head)\b', target_name, re.I))
+    attrs = extract_part_attributes(target_name, repeat)
 
     # Sequins Count
     seq_hdr = next((w for w in words if w["text"] == "Sequins:" and w["x0"] > 380), None)
@@ -160,7 +202,11 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
         "width_mm": width_mm,
         "total_bobbin_m": round(total_bobbin_m, 2),
         "repeat": repeat,
-        "is_double_repeat": is_double_repeat,
+        "is_double_repeat": attrs["is_double_repeat"],
+        "size_tag": attrs["size_tag"],
+        "tag_heads": attrs["tag_heads"],
+        "is_size_split": attrs["is_size_split"],
+        "is_multi_color_repeat": attrs["is_multi_color_repeat"],
         "sequins_total": sequins_total,
         "thread_colors": thread_colors
     }
@@ -209,6 +255,10 @@ def parse_wilcom_pdf(file_bytes: bytes, filename: str) -> list[dict]:
                     "design_name": p_name,
                     "repeat": pdata["repeat"],
                     "is_double_repeat": pdata.get("is_double_repeat", False),
+                    "size_tag": pdata.get("size_tag"),
+                    "tag_heads": pdata.get("tag_heads"),
+                    "is_size_split": pdata.get("is_size_split", False),
+                    "is_multi_color_repeat": pdata.get("is_multi_color_repeat", False),
                     "stitches": pdata["stitches"],
                     "height_mm": pdata["height_mm"],
                     "width_mm": pdata["width_mm"],
@@ -237,6 +287,11 @@ def parse_wilcom_pdf(file_bytes: bytes, filename: str) -> list[dict]:
                         "filename": clean_name,
                         "design_name": p_name,
                         "repeat": pdata["repeat"],
+                        "is_double_repeat": pdata.get("is_double_repeat", False),
+                        "size_tag": pdata.get("size_tag"),
+                        "tag_heads": pdata.get("tag_heads"),
+                        "is_size_split": pdata.get("is_size_split", False),
+                        "is_multi_color_repeat": pdata.get("is_multi_color_repeat", False),
                         "stitches": pdata["stitches"],
                         "height_mm": pdata["height_mm"],
                         "width_mm": pdata["width_mm"],
@@ -294,13 +349,17 @@ def parse_image_part(file_bytes: bytes, filename: str) -> dict:
     elif re.search(r'\bdouble\s*repeat\b', base_name, re.I):
         repeat = 2.0
 
-    is_double_repeat = (repeat >= 2.0) or bool(re.search(r'\b(double|14\s*h|14\s*head)\b', base_name, re.I))
+    attrs = extract_part_attributes(base_name, repeat)
 
     return {
         "filename": clean_name,
         "design_name": base_name,
         "repeat": repeat,
-        "is_double_repeat": is_double_repeat,
+        "is_double_repeat": attrs["is_double_repeat"],
+        "size_tag": attrs["size_tag"],
+        "tag_heads": attrs["tag_heads"],
+        "is_size_split": attrs["is_size_split"],
+        "is_multi_color_repeat": attrs["is_multi_color_repeat"],
         "stitches": 120000,  # sensible default for manual review
         "height_mm": 0.0,
         "width_mm": 0.0,
