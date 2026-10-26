@@ -1351,6 +1351,14 @@ results = calculate_full_production(
 )
 
 cone_rows = results["cone_rows"]
+if cone_rows:
+    df_cones = pd.DataFrame(cone_rows).sort_values("Kul Cones (🧵)", ascending=False)
+else:
+    df_cones = pd.DataFrame(columns=[
+        'Needle', 'Code', 'Description', 'Type', '1 Suit (m)',
+        'Cones / Suit', 'Per Color Cones', 'Kul Cones (🧵)', 'Formula / Note',
+        'Category', 'Is_Same'
+    ])
 total_order_cones = results["total_order_cones"]
 total_common_cones = results["total_common_cones"]
 total_same_cones = results["total_same_cones"]
@@ -1433,8 +1441,7 @@ with tab_req:
     </div>
     """)
 
-    if cone_rows:
-        df_cones = pd.DataFrame(cone_rows).sort_values("Kul Cones (🧵)", ascending=False)
+    if not df_cones.empty:
 
         table_html = """<div class="data-table-container">
 <table class="data-table">
@@ -1499,6 +1506,8 @@ with tab_req:
                 "text/plain",
                 use_container_width=True
             )
+    else:
+        st.info("💡 Abhi koi part ya colors upload nahi hue. Sidebar se Wilcom PDF ya Image upload karein.")
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -1840,8 +1849,11 @@ SUIT KE PARTS (CUT-SHEET):
     master_slip_text += f"""------------------------------------------------------------
 DHAAGA REQUISITION (STORE / PURCHASE):
 """
-    for _, r in df_cones.iterrows():
-        master_slip_text += f"• Code {r['Code']:<8} {r['Description'][:18]:<18} [{r['Category'][:10]}]: {r['Kul Cones (🧵)']:>3} Cones ({r['Formula / Note']})\n"
+    if not df_cones.empty:
+        for _, r in df_cones.iterrows():
+            master_slip_text += f"• Code {r['Code']:<8} {r['Description'][:18]:<18} [{r['Category'][:10]}]: {r['Kul Cones (🧵)']:>3} Cones ({r['Formula / Note']})\n"
+    else:
+        master_slip_text += "• (Koi dhaaga list mojood nahi hai)\n"
 
     master_slip_text += f"""============================================================
 1 PIECE RATE: Rs {piece_rate:,.2f}  |  KUL ORDER BILL ({num_pieces} pcs): Rs {total_order_amount:,.0f}
@@ -1877,8 +1889,11 @@ Master Signature: _______________   Store Issue: ___________
             dbl_str = " (Double Repeat)" if heads < machine_heads else ""
             whatsapp_msg += f"• *{p['design_name']}*: Rep {rep:g}x | *{heads} Heads* ({p_runs} Repeat){dbl_str}\n"
         whatsapp_msg += "\n*DHAAGA LIST:*\n"
-        for _, r in df_cones.iterrows():
-            whatsapp_msg += f"- *Code {r['Code']}* ({r['Description']}): *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
+        if not df_cones.empty:
+            for _, r in df_cones.iterrows():
+                whatsapp_msg += f"- *Code {r['Code']}* ({r['Description']}): *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
+        else:
+            whatsapp_msg += "- (Koi dhaaga list mojood nahi hai)\n"
         whatsapp_msg += f"\n*KUL CONES:* {total_order_cones} Cones\n"
         whatsapp_msg += f"*Total Repeat:* {total_runs} Repeats (~{shifts_needed} Shifts)"
 
