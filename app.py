@@ -1,13 +1,9 @@
 """
-Threadworks — Production & Cones ERP
-Compact, High-Density Factory Dashboard with Dual Light & Dark Theme Support.
-Supports:
-- Wilcom PDF Worksheet & Design Image parsing
-- 30/28 Machine Heads multi-part suit calculation
-- Multi-lot calculation (e.g. 3 Lots = 540 suits across 6 base colors)
-- Exact same-thread formula matching Pakistani embroidery factory standard
-- Dual Theme Toggle: 🌙 Dark Mode / ☀️ Light Mode
-- Ultra-Compact, High-Density Industrial ERP Layout
+Threadworks — Embroidery Factory Production & Costing ERP
+Separate Systems for:
+1. Dhaaga (Thread / Cones) Calculation
+2. Stitch & 1 Piece Rate Calculation (per 1,000 stitches)
+Complete Roman Urdu Interface for Pakistani Embroidery Factory Operations.
 """
 
 import hashlib
@@ -28,7 +24,6 @@ importlib.reload(core.security)
 importlib.reload(core.parser)
 importlib.reload(core.calculator)
 
-# Modular Core Imports
 from core.config import (
     DEFAULT_MACHINE_HEADS,
     DEFAULT_BASE_COLORS,
@@ -39,35 +34,34 @@ from core.config import (
     DEFAULT_CONE_PRICE,
     DEFAULT_MACHINE_RPM,
     DEFAULT_SHIFT_HOURS,
-    METERS_TO_YARDS
+    METERS_TO_YARDS,
+    DOUBLE_HEAD_WIDTH_THRESHOLD_MM
 )
 from core.security import validate_uploaded_file
-from core.parser import parse_wilcom_pdf, parse_image_part
+from core.parser import parse_wilcom_pdf, parse_image_part, extract_repeat_from_text
 from core.calculator import (
     aggregate_suit_parts,
     calculate_full_production,
-    compute_part_heads_config
+    compute_part_heads_config,
+    get_part_mode_options,
+    is_same_color
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
 # PAGE CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Threadworks ERP • Factory Calculator",
+    page_title="Threadworks • Factory Embroidery Calculator",
     page_icon="🧵",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-# SESSION STATE & BROWSER SETTINGS PERSISTENCE
-# Defaults: Light Theme, 28 Heads, 1.0 Lot, 6 Shades, 0.0% Waste, 0.45 Rate
+# SESSION STATE & THEME PERSISTENCE
 # ═══════════════════════════════════════════════════════════════════════════
 url_theme = st.query_params.get("theme", "").strip().lower()
-if url_theme in ["dark", "light"]:
-    persisted_theme = "Dark" if url_theme == "dark" else "Light"
-else:
-    persisted_theme = "Light"  # Default: Light theme
+persisted_theme = "Light" if url_theme == "light" else "Dark"
 
 if "theme_mode" not in st.session_state:
     st.session_state.theme_mode = persisted_theme
@@ -83,39 +77,28 @@ def _safe_int_param(key, default_val, min_v, max_v):
 def _safe_float_param(key, default_val, min_v, max_v):
     try:
         if key in st.query_params:
-            val = float(st.query_params[key])
-            if key == "rate" and (abs(val - 1.45) < 0.001 or val > 5.0):
-                return default_val
-            return max(min_v, min(max_v, val))
+            return max(min_v, min(max_v, float(st.query_params[key])))
     except Exception:
         pass
     return default_val
 
-# Default 28 heads and 1.0 lot as requested
 if "saved_heads" not in st.session_state:
-    st.session_state.saved_heads = _safe_int_param("heads", 28, 1, 120)
+    st.session_state.saved_heads = _safe_int_param("heads", DEFAULT_MACHINE_HEADS, 1, 120)
 
 if "saved_lots" not in st.session_state:
     st.session_state.saved_lots = _safe_float_param("lots", 1.0, 0.5, 50.0)
 
 if "saved_shades" not in st.session_state:
-    st.session_state.saved_shades = _safe_int_param("shades", 6, 1, 30)
+    st.session_state.saved_shades = _safe_int_param("shades", DEFAULT_BASE_COLORS, 1, 30)
 
 if "saved_waste" not in st.session_state:
     st.session_state.saved_waste = _safe_float_param("waste", 0.0, 0.0, 30.0)
 
-if "saved_rate" not in st.session_state or abs(st.session_state.get("saved_rate", 0) - 1.45) < 0.001:
-    st.session_state.saved_rate = _safe_float_param("rate", DEFAULT_STITCH_RATE, 0.05, 5.0)
+if "saved_rate" not in st.session_state:
+    st.session_state.saved_rate = _safe_float_param("rate", DEFAULT_STITCH_RATE, 0.05, 10.0)
 
-# Synchronize URL query parameters
-if st.query_params.get("theme", "").strip().lower() != st.session_state.theme_mode.lower():
-    st.query_params["theme"] = st.session_state.theme_mode.lower()
-
-if "heads" not in st.query_params:
-    st.query_params["heads"] = str(st.session_state.saved_heads)
-
-if "lots" not in st.query_params:
-    st.query_params["lots"] = f"{st.session_state.saved_lots:g}"
+if "suit_design_name" not in st.session_state:
+    st.session_state.suit_design_name = ""
 
 if "parts" not in st.session_state:
     st.session_state.parts = {}
@@ -129,56 +112,55 @@ if "custom_same_overrides" not in st.session_state:
 is_dark = (st.session_state.theme_mode == "Dark")
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ULTRA-COMPACT THEME STYLES (DARK & LIGHT)
+# MODERN DESIGN SYSTEM (VANILLA CSS)
 # ═══════════════════════════════════════════════════════════════════════════
 if is_dark:
     theme_css_vars = """
     :root {
-        --bg-main: #0f0e0d;
-        --bg-surface: #181512;
-        --bg-surface-elevated: #221c17;
-        --bg-surface-subtle: #14110e;
-        --border-main: #2b231d;
+        --primary-color: #f59e0b;
+        --background-color: #0b0f19;
+        --secondary-background-color: #111827;
+        --text-color: #f8fafc;
+        --bg-main: #0b0f19;
+        --bg-surface: #111827;
+        --bg-surface-elevated: #1e293b;
+        --bg-surface-subtle: #162032;
+        --border-main: #27354f;
         --border-focus: #f59e0b;
-        --border-subtle: #241d18;
-        --text-primary: #f5f2ed;
-        --text-secondary: #a39788;
-        --text-muted: #756a5c;
-        --input-bg: #1c1713;
-        --input-border: #332921;
-        --btn-bg: #221b16;
-        --btn-border: #382c22;
-        --btn-text: #e8e1d7;
-        --btn-hover-bg: #2f251e;
-        --btn-hover-border: #524032;
+        --border-subtle: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --label-color: #f1f5f9;
+        --input-bg: #0f172a;
+        --input-border: #334155;
+        --btn-bg: #1e293b;
+        --btn-border: #384860;
+        --btn-text: #f8fafc;
+        --btn-hover-bg: #2d3b55;
+        --btn-hover-border: #f59e0b;
         --btn-hover-text: #ffffff;
-        --table-header-bg: #14100d;
-        --table-row-hover: #1f1914;
-        --table-cell-border: #241c16;
-        --badge-amber-bg: rgba(245, 158, 11, 0.12);
-        --badge-amber-border: rgba(245, 158, 11, 0.35);
-        --badge-amber-text: #fbbf24;
-        --badge-purple-bg: rgba(168, 85, 247, 0.14);
-        --badge-purple-border: rgba(168, 85, 247, 0.35);
-        --badge-purple-text: #c084fc;
-        --badge-cyan-bg: rgba(6, 182, 212, 0.12);
-        --badge-cyan-border: rgba(6, 182, 212, 0.32);
+        --table-header-bg: #162032;
+        --table-row-hover: #1e293b;
+        --table-cell-border: #1e293b;
+        --tab-active-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(192, 132, 252, 0.15));
+        --accent-amber: #f59e0b;
         --accent-purple: #c084fc;
-        --accent-amber: #fbbf24;
         --accent-cyan: #38bdf8;
-        --accent-green: #34d399;
+        --accent-green: #10b981;
         --accent-pink: #f472b6;
         --accent-coral: #fb923c;
-        --tab-list-bg: #14100d;
-        --tab-active-bg: #261e18;
-        --tab-active-border: #47382c;
-        --tab-active-text: #fbbf24;
-        --card-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        --card-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+        --card-hover-shadow: 0 8px 24px rgba(245, 158, 11, 0.18);
     }
     """
 else:
     theme_css_vars = """
     :root {
+        --primary-color: #d97706;
+        --background-color: #f8fafc;
+        --secondary-background-color: #ffffff;
+        --text-color: #0f172a;
         --bg-main: #f8fafc;
         --bg-surface: #ffffff;
         --bg-surface-elevated: #f1f5f9;
@@ -189,642 +171,587 @@ else:
         --text-primary: #0f172a;
         --text-secondary: #475569;
         --text-muted: #64748b;
+        --label-color: #0f172a;
         --input-bg: #ffffff;
         --input-border: #cbd5e1;
-        --btn-bg: #ffffff;
+        --btn-bg: #f8fafc;
         --btn-border: #cbd5e1;
         --btn-text: #0f172a;
         --btn-hover-bg: #f1f5f9;
-        --btn-hover-border: #94a3b8;
+        --btn-hover-border: #d97706;
         --btn-hover-text: #0f172a;
-        --table-header-bg: #f8fafc;
-        --table-row-hover: #f1f5f9;
+        --table-header-bg: #f1f5f9;
+        --table-row-hover: #f8fafc;
         --table-cell-border: #e2e8f0;
-        --badge-amber-bg: #fef3c7;
-        --badge-amber-border: #fde68a;
-        --badge-amber-text: #b45309;
-        --badge-purple-bg: #f3e8ff;
-        --badge-purple-border: #d8b4fe;
-        --badge-purple-text: #7e22ce;
-        --badge-cyan-bg: #e0f2fe;
-        --badge-cyan-border: #bae6fd;
-        --accent-purple: #7e22ce;
+        --tab-active-bg: #fef3c7;
         --accent-amber: #d97706;
+        --accent-purple: #7c3aed;
         --accent-cyan: #0284c7;
         --accent-green: #059669;
         --accent-pink: #db2777;
         --accent-coral: #ea580c;
-        --tab-list-bg: #f1f5f9;
-        --tab-active-bg: #ffffff;
-        --tab-active-border: #cbd5e1;
-        --tab-active-text: #d97706;
-        --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+        --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        --card-hover-shadow: 0 8px 20px rgba(217, 119, 6, 0.12);
     }
     """
 
-st.html(f"""
+st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap');
 
 {theme_css_vars}
 
-/* Zero Horizontal Scroll & High Density Base */
-html, body, .stApp, [data-testid="stAppViewContainer"], .block-container {{
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-    box-sizing: border-box !important;
+html, body, [class*="css"], .stApp {{
     background-color: var(--bg-main) !important;
     color: var(--text-primary) !important;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    letter-spacing: -0.01em;
 }}
 
-/* Completely hide Streamlit native top header */
-header[data-testid="stHeader"],
-[data-testid="stHeader"],
-#MainMenu,
-footer {{
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-}}
-
-/* Ultra Compact Page Container */
-.block-container {{
-    max-width: 1400px !important;
-    padding-top: 0.5rem !important;
-    padding-bottom: 2rem !important;
-    padding-left: clamp(0.5rem, 1.8vw, 1.2rem) !important;
-    padding-right: clamp(0.5rem, 1.8vw, 1.2rem) !important;
-}}
-
-/* Streamlit Gap Reductions for High-Density UI */
-[data-testid="stVerticalBlock"] {{
-    gap: 0.35rem !important;
-}}
-div[data-testid="stVerticalBlock"] > div {{
-    gap: 0.35rem !important;
-}}
-div[data-testid="stHorizontalBlock"] {{
-    gap: 0.45rem !important;
-    align-items: center !important;
-}}
-
-/* Section Headers */
-.section-tag {{
-    font-size: 0.68rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-secondary);
-    margin-top: 0.6rem;
-    margin-bottom: 0.3rem;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}}
-.section-tag::after {{
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border-subtle);
-    margin-left: 6px;
-}}
-
-/* Top Brand Bar */
-.brand-bar {{
+/* Header Banner */
+.brand-header {{
+    background: var(--bg-surface);
+    border: 1px solid var(--border-main);
+    border-radius: 12px;
+    padding: 12px 18px;
+    margin-bottom: 12px;
+    box-shadow: var(--card-shadow);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 12px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: 8px;
-    margin-bottom: 4px;
-    box-shadow: var(--card-shadow);
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 10px;
 }}
-.brand-left {{
+.brand-title-box {{
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
 }}
-.brand-title {{
-    font-size: 0.95rem;
-    font-weight: 800;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}}
-.brand-badge-pro {{
-    font-size: 0.62rem;
-    font-weight: 800;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--badge-amber-bg);
-    border: 1px solid var(--badge-amber-border);
-    color: var(--badge-amber-text);
-    text-transform: uppercase;
-}}
-.brand-sub {{
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}}
-.brand-chips {{
-    display: flex;
-    gap: 5px;
-    align-items: center;
-}}
-.chip {{
-    padding: 2px 7px;
-    border-radius: 5px;
-    font-size: 0.68rem;
-    font-weight: 700;
-}}
-.chip-heads {{
-    background: var(--badge-amber-bg);
-    border: 1px solid var(--badge-amber-border);
-    color: var(--badge-amber-text);
-}}
-.chip-lot {{
-    background: var(--badge-purple-bg);
-    border: 1px solid var(--badge-purple-border);
-    color: var(--badge-purple-text);
-}}
-.chip-waste {{
-    background: var(--badge-cyan-bg);
-    border: 1px solid var(--badge-cyan-border);
-    color: var(--accent-cyan);
-}}
-
-/* Compact Production Toolbar Card */
-.toolbar-card {{
-    background: var(--bg-surface);
+.brand-logo-icon {{
+    font-size: 1.8rem;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(192, 132, 252, 0.2));
     border: 1px solid var(--border-main);
-    border-radius: 8px;
-    padding: 8px 10px;
-    margin-bottom: 4px;
-    box-shadow: var(--card-shadow);
+    border-radius: 10px;
+    padding: 4px 10px;
 }}
-
-/* Pipeline Metric Cards Grid */
-.pipeline-grid {{
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 7px;
-    margin-bottom: 8px;
-}}
-.pipe-card {{
-    background: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: 7px;
-    padding: 7px 10px;
-    position: relative;
-    box-shadow: var(--card-shadow);
-    transition: transform 0.15s ease, border-color 0.15s ease;
-}}
-.pipe-card:hover {{
-    transform: translateY(-1px);
-    border-color: var(--border-focus);
-}}
-.pipe-card.purple {{ border-top: 3px solid var(--accent-purple); }}
-.pipe-card.amber  {{ border-top: 3px solid var(--accent-amber); }}
-.pipe-card.cyan   {{ border-top: 3px solid var(--accent-cyan); }}
-.pipe-card.green  {{ border-top: 3px solid var(--accent-green); }}
-.pipe-card.pink   {{ border-top: 3px solid var(--accent-pink); }}
-.pipe-card.coral  {{ border-top: 3px solid var(--accent-coral); }}
-
-.pipe-label {{
-    font-size: 0.62rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-secondary);
-    margin-bottom: 2px;
-}}
-.pipe-value {{
+.brand-main-text {{
     font-size: 1.25rem;
     font-weight: 800;
-    font-family: 'JetBrains Mono', monospace;
-    line-height: 1.15;
-}}
-.pipe-sub {{
-    font-size: 0.66rem;
-    color: var(--text-muted);
-    margin-top: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}}
-
-/* High Density Cut-Sheet Cards (2 per row on desktop) */
-.cut-card {{
-    background: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: 7px;
-    padding: 7px 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: var(--card-shadow);
-}}
-.cut-title {{
-    font-size: 0.8rem;
-    font-weight: 700;
     color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 220px;
+    line-height: 1.2;
 }}
-.cut-sub {{
-    font-size: 0.68rem;
+.brand-sub-text {{
+    font-size: 0.82rem;
     color: var(--text-secondary);
-    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    margin-top: 2px;
+}}
+.brand-pill {{
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-main);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}}
+.brand-pill strong {{
+    color: var(--text-primary);
 }}
 
-/* Compact Data Table */
-.data-table-container {{
+/* Top Settings Card */
+.settings-panel {{
     background: var(--bg-surface);
     border: 1px solid var(--border-main);
-    border-radius: 8px;
-    overflow-x: auto;
-    margin-bottom: 8px;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
     box-shadow: var(--card-shadow);
 }}
-.data-table {{
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.78rem;
-    text-align: left;
-}}
-.data-table th {{
-    background: var(--table-header-bg);
-    color: var(--text-secondary);
-    font-size: 0.66rem;
+.panel-title {{
+    font-size: 0.82rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 7px 10px;
-    border-bottom: 1px solid var(--border-main);
+    letter-spacing: 0.05em;
+    color: var(--accent-amber);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }}
-.data-table td {{
-    padding: 7px 10px;
-    border-bottom: 1px solid var(--table-cell-border);
-    color: var(--text-primary);
-    vertical-align: middle;
+
+/* KPI Metric Cards Grid */
+.kpi-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
 }}
-.data-table tr:last-child td {{
-    border-bottom: none;
+.kpi-card {{
+    background: var(--bg-surface);
+    border: 1px solid var(--border-main);
+    border-radius: 10px;
+    padding: 12px 14px;
+    box-shadow: var(--card-shadow);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
 }}
-.data-table tr:hover {{
-    background: var(--table-row-hover);
+.kpi-card:hover {{
+    transform: translateY(-2px);
+    box-shadow: var(--card-hover-shadow);
+    border-color: var(--border-focus);
+}}
+.kpi-card::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+}}
+.kpi-card.purple::before {{ background: var(--accent-purple); }}
+.kpi-card.amber::before {{ background: var(--accent-amber); }}
+.kpi-card.cyan::before {{ background: var(--accent-cyan); }}
+.kpi-card.green::before {{ background: var(--accent-green); }}
+.kpi-card.pink::before {{ background: var(--accent-pink); }}
+.kpi-card.coral::before {{ background: var(--accent-coral); }}
+
+.kpi-label {{
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}}
+.kpi-value {{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.55rem;
+    font-weight: 900;
+    line-height: 1.2;
+    margin-bottom: 3px;
+}}
+.kpi-subtext {{
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 700;
+}}
+
+@media (max-width: 768px) {{
+    .kpi-grid {{
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }}
+    .kpi-card {{
+        padding: 10px 12px !important;
+    }}
+    .kpi-value {{
+        font-size: 1.25rem !important;
+    }}
+    .kpi-subtext {{
+        font-size: 0.72rem !important;
+    }}
+    .brand-header {{
+        padding: 10px 12px !important;
+    }}
+    .brand-main-text {{
+        font-size: 1.05rem !important;
+    }}
+    .brand-pill {{
+        padding: 3px 8px !important;
+        font-size: 0.72rem !important;
+    }}
+    .part-card {{
+        padding: 10px 12px !important;
+    }}
+}}
+@media (max-width: 480px) {{
+    .kpi-grid {{
+        grid-template-columns: 1fr !important;
+    }}
+}}
+
+/* Part Cut-Sheet Card */
+.part-card {{
+    background: var(--bg-surface);
+    border: 1px solid var(--border-main);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.2s ease;
+}}
+.part-card:hover {{
+    border-color: var(--border-focus);
 }}
 
 /* Badges */
-.badge-same-erp {{
-    background: var(--badge-purple-bg);
-    border: 1px solid var(--badge-purple-border);
-    color: var(--accent-purple);
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 0.68rem;
-    font-weight: 700;
+.badge-tag {{
     display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
 }}
-.badge-common-erp {{
-    background: var(--badge-cyan-bg);
-    border: 1px solid var(--badge-cyan-border);
+.badge-tag.standard {{
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
     color: var(--accent-cyan);
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 0.68rem;
-    font-weight: 700;
-    display: inline-block;
 }}
-.badge-double-erp {{
-    background: var(--badge-amber-bg);
-    border: 1px solid var(--badge-amber-border);
+.badge-tag.double {{
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
     color: var(--accent-amber);
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 0.66rem;
-    font-weight: 700;
-    display: inline-block;
 }}
-.badge-multi-erp {{
+.badge-tag.multi {{
     background: rgba(16, 185, 129, 0.12);
-    border: 1px solid rgba(16, 185, 129, 0.45);
-    color: #059669;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 0.66rem;
-    font-weight: 700;
-    display: inline-block;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: var(--accent-green);
+}}
+.badge-tag.same {{
+    background: rgba(192, 132, 252, 0.14);
+    border: 1px solid rgba(192, 132, 252, 0.35);
+    color: var(--accent-purple);
 }}
 
-/* Surface Container */
-.card-surface {{
+/* Custom Table Styling */
+.table-container {{
+    border: 1px solid var(--border-main);
+    border-radius: 10px;
+    overflow-x: auto;
     background: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
 }}
-.mini-box {{
-    background: var(--bg-surface-elevated);
-    border: 1px solid var(--border-main);
-    border-radius: 5px;
-    padding: 6px 4px;
-    text-align: center;
+.modern-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    text-align: left;
+}}
+.modern-table th {{
+    background: var(--table-header-bg) !important;
+    color: var(--accent-amber) !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    font-size: 0.76rem !important;
+    letter-spacing: 0.04em !important;
+    padding: 11px 12px !important;
+    border-bottom: 1.5px solid var(--border-main) !important;
+}}
+.modern-table td {{
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--table-cell-border);
+    color: var(--text-primary);
+}}
+.modern-table tr:hover {{
+    background: var(--table-row-hover);
 }}
 
-/* ═══════════════════════════════════════════════════════════════════
-   ULTRA-COMPACT STREAMLIT INPUTS OVERRIDES
-   ═══════════════════════════════════════════════════════════════════ */
-.stNumberInput, .stTextInput, .stSelectbox {{
-    margin-bottom: 0px !important;
-}}
-[data-testid="stNumberInputContainer"],
-div[data-baseweb="base-input"],
-div[data-baseweb="input"],
-div[data-baseweb="select"] > div,
-div[data-testid="stSelectbox"] [data-baseweb="select"] {{
+/* Streamlit Widget Polishing */
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input {{
     background-color: var(--input-bg) !important;
     border: 1px solid var(--input-border) !important;
-    border-radius: 5px !important;
+    border-radius: 7px !important;
     color: var(--text-primary) !important;
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 0 4px !important;
-}}
-[data-testid="stNumberInput"] input,
-[data-testid="stTextInput"] input,
-input {{
-    background-color: var(--input-bg) !important;
-    color: var(--text-primary) !important;
-    -webkit-text-fill-color: var(--text-primary) !important;
-    height: 26px !important;
-    font-size: 0.78rem !important;
-    padding: 1px 4px !important;
     font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+}}
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stNumberInput"] input:focus {{
+    border-color: var(--border-focus) !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
 }}
 
-button[data-testid="stNumberInputStepDown"],
-button[data-testid="stNumberInputStepUp"],
-[data-testid="stNumberInputStepDown"],
-[data-testid="stNumberInputStepUp"] {{
+/* Stepper +/- buttons in stNumberInput */
+div[data-testid="stNumberInput"] button,
+div[data-testid="stNumberInputStepDown"],
+div[data-testid="stNumberInputStepUp"] {{
     background-color: var(--bg-surface-elevated) !important;
-    border: none !important;
+    border-color: var(--input-border) !important;
     color: var(--text-primary) !important;
-    width: 20px !important;
-    height: 24px !important;
-    min-width: 20px !important;
-    padding: 0 !important;
 }}
-button[data-testid="stNumberInputStepDown"] svg,
-button[data-testid="stNumberInputStepUp"] svg {{
+div[data-testid="stNumberInput"] button:hover,
+div[data-testid="stNumberInputStepDown"]:hover,
+div[data-testid="stNumberInputStepUp"]:hover {{
+    background-color: var(--btn-hover-bg) !important;
+    color: var(--accent-amber) !important;
+    border-color: var(--border-focus) !important;
+}}
+div[data-testid="stNumberInput"] button svg {{
     fill: var(--text-primary) !important;
-    stroke: var(--text-primary) !important;
-    width: 10px !important;
-    height: 10px !important;
 }}
 
-/* All Buttons (Compact) */
-button,
-button[kind="secondary"],
-button[kind="primary"],
-[data-testid^="stBaseButton"],
-.stButton > button,
-.stDownloadButton > button {{
-    background-color: var(--btn-bg) !important;
-    border: 1px solid var(--btn-border) !important;
-    color: var(--btn-text) !important;
-    border-radius: 5px !important;
-    height: 28px !important;
-    min-height: 28px !important;
-    padding: 2px 8px !important;
-    font-size: 0.74rem !important;
-    font-weight: 600 !important;
+/* BaseWeb Selectbox & Dropdown Menus */
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"],
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+.stApp [data-baseweb="select"],
+.stApp [data-baseweb="select"] > div {{
+    background-color: var(--input-bg) !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: 7px !important;
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div:hover,
+.stApp [data-baseweb="select"] > div:hover {{
+    border-color: var(--border-focus) !important;
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input,
+.stApp [data-baseweb="select"] span,
+.stApp [data-baseweb="select"] div,
+.stApp [data-baseweb="select"] input {{
+    color: var(--text-primary) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] svg,
+.stApp [data-baseweb="select"] svg {{
+    fill: var(--text-primary) !important;
+    color: var(--text-primary) !important;
+}}
+div[data-baseweb="popover"],
+div[data-baseweb="popover"] > div,
+ul[role="listbox"] {{
+    background-color: var(--bg-surface-elevated) !important;
+    border: 1px solid var(--border-main) !important;
+    border-radius: 8px !important;
+    color: var(--text-primary) !important;
     box-shadow: var(--card-shadow) !important;
 }}
-button p, button span, button div {{
-    color: var(--btn-text) !important;
-    font-size: 0.74rem !important;
+li[role="option"] {{
+    background-color: transparent !important;
+    color: var(--text-primary) !important;
+    font-size: 0.84rem !important;
+    font-weight: 600 !important;
+    padding: 8px 12px !important;
 }}
-button:hover, .stButton > button:hover {{
-    background-color: var(--btn-hover-bg) !important;
-    border-color: var(--border-focus) !important;
-    color: var(--btn-hover-text) !important;
-}}
-button:hover p, button:hover span, button:hover div {{
-    color: var(--btn-hover-text) !important;
+li[role="option"]:hover,
+li[role="option"][aria-selected="true"] {{
+    background-color: var(--table-row-hover) !important;
+    color: var(--accent-amber) !important;
 }}
 
-/* Compact Labels */
-[data-testid="stWidgetLabel"] {{
-    min-height: auto !important;
-    margin-bottom: 1px !important;
-}}
-[data-testid="stWidgetLabel"] p,
-[data-testid="stWidgetLabel"] label {{
-    color: var(--text-secondary) !important;
-    font-weight: 700 !important;
-    font-size: 0.65rem !important;
+/* High-Contrast Widget Labels */
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] *,
+.stApp [data-testid="stWidgetLabel"] label,
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stWidgetLabel"] span,
+.stApp [data-testid="stWidgetLabel"] div {{
+    color: var(--label-color) !important;
+    font-weight: 800 !important;
+    font-size: 0.77rem !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    margin: 0 !important;
+    letter-spacing: 0.04em !important;
+}}
+.stApp [data-testid="stWidgetLabel"] svg {{
+    fill: var(--text-muted) !important;
 }}
 
-/* File Uploader Dropzone */
-[data-testid="stFileUploader"] section,
-section[data-testid="stFileUploadDropzone"] {{
+/* Button System */
+.stButton > button,
+button[kind="primary"],
+button[kind="secondary"],
+div[data-testid="stDownloadButton"] > button {{
+    background-color: var(--btn-bg) !important;
+    color: var(--btn-text) !important;
+    border: 1px solid var(--btn-border) !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    font-size: 0.84rem !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.15s ease !important;
+}}
+.stButton > button:hover,
+button[kind="primary"]:hover,
+button[kind="secondary"]:hover,
+div[data-testid="stDownloadButton"] > button:hover {{
+    background-color: var(--btn-hover-bg) !important;
+    color: var(--btn-hover-text) !important;
+    border-color: var(--border-focus) !important;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2) !important;
+}}
+
+/* Specialized Toolbar Buttons */
+.demo-btn-wrap .stButton > button {{
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(192, 132, 252, 0.16)) !important;
+    border: 1px solid var(--accent-amber) !important;
+    color: var(--accent-amber) !important;
+    font-weight: 800 !important;
+}}
+.demo-btn-wrap .stButton > button:hover {{
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(192, 132, 252, 0.28)) !important;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
+    color: #ffffff !important;
+    border-color: #f59e0b !important;
+}}
+.clear-btn-wrap .stButton > button {{
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid rgba(239, 68, 68, 0.35) !important;
+    color: #f87171 !important;
+    font-weight: 700 !important;
+}}
+.clear-btn-wrap .stButton > button:hover {{
+    background-color: rgba(239, 68, 68, 0.24) !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
+}}
+.del-btn-wrap .stButton > button {{
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    border: 1px solid rgba(239, 68, 68, 0.45) !important;
+    color: #f87171 !important;
+    border-radius: 8px !important;
+    font-size: 1.15rem !important;
+    padding: 6px !important;
+    box-shadow: 0 1px 4px rgba(239, 68, 68, 0.15) !important;
+}}
+.del-btn-wrap .stButton > button:hover {{
+    background-color: rgba(239, 68, 68, 0.35) !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4) !important;
+}}
+
+/* File Uploader */
+.stApp div[data-testid="stFileUploader"] {{
+    background: transparent !important;
+}}
+.stApp div[data-testid="stFileUploader"] section {{
     background-color: var(--bg-surface) !important;
     border: 1px dashed var(--border-main) !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+}}
+.stApp div[data-testid="stFileUploader"] section:hover {{
+    border-color: var(--border-focus) !important;
+}}
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {{
+    color: var(--text-secondary) !important;
+}}
+.stApp div[data-testid="stFileUploaderFile"] {{
+    background-color: var(--bg-surface-elevated) !important;
+    border: 1px solid var(--border-main) !important;
     border-radius: 6px !important;
     padding: 4px 8px !important;
-    min-height: 40px !important;
 }}
-section[data-testid="stFileUploadDropzone"] button {{
-    height: 24px !important;
-    min-height: 24px !important;
-    font-size: 0.68rem !important;
-    padding: 1px 6px !important;
-}}
-section[data-testid="stFileUploadDropzone"] small,
-section[data-testid="stFileUploadDropzone"] span {{
-    font-size: 0.68rem !important;
-}}
-
-/* Radio Buttons */
-[data-testid="stRadio"] label p,
-[data-testid="stRadio"] label span {{
+.stApp div[data-testid="stFileUploaderFileName"] {{
     color: var(--text-primary) !important;
-    font-size: 0.74rem !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
 }}
-
-/* Tab List */
-[data-baseweb="tab-list"] {{
-    background: var(--tab-list-bg) !important;
-    border: 1px solid var(--border-main) !important;
-    border-radius: 7px !important;
-    padding: 2px !important;
-    gap: 3px !important;
-    margin-bottom: 8px !important;
+.stApp div[data-testid="stFileUploaderFileData"] {{
+    color: var(--text-muted) !important;
+    font-size: 0.72rem !important;
 }}
-[data-baseweb="tab"] {{
-    background: transparent !important;
-    border: none !important;
-    border-radius: 5px !important;
-    font-size: 0.74rem !important;
-    font-weight: 700 !important;
+.stApp div[data-testid="stFileUploaderFile"] button {{
     color: var(--text-secondary) !important;
-    padding: 4px 10px !important;
 }}
-[aria-selected="true"] {{
-    background: var(--tab-active-bg) !important;
-    border: 1px solid var(--tab-active-border) !important;
-    color: var(--tab-active-text) !important;
-    box-shadow: var(--card-shadow) !important;
+.stApp div[data-testid="stFileUploaderFile"] button:hover {{
+    color: #ef4444 !important;
+}}
+.stApp div[data-testid="stFileUploaderFile"] svg {{
+    fill: var(--text-primary) !important;
 }}
 
-/* Expander */
-[data-testid="stExpander"] {{
+/* Radio Buttons Styling */
+.stApp div[data-testid="stRadio"] > div {{
+    gap: 12px;
+}}
+.stApp div[data-testid="stRadio"] label {{
+    color: var(--text-primary) !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem !important;
+}}
+.stApp div[data-testid="stRadio"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {{
+    color: var(--text-primary) !important;
+    font-weight: 700 !important;
+    font-size: 0.82rem !important;
+}}
+
+/* Tab Styling */
+.stApp .stTabs [data-baseweb="tab-list"] {{
+    gap: 8px !important;
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-main) !important;
-    border-radius: 6px !important;
-    margin-top: 4px !important;
+    border-radius: 10px !important;
+    padding: 6px !important;
 }}
-[data-testid="stExpander"] summary {{
-    padding: 4px 8px !important;
-    font-size: 0.74rem !important;
+.stApp .stTabs [data-baseweb="tab"] {{
+    background-color: var(--bg-surface-elevated) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 8px !important;
+    padding: 8px 16px !important;
+    transition: all 0.2s ease !important;
 }}
-
-/* Responsive Breakpoints */
-@media (max-width: 1024px) {{
-    .pipeline-grid {{
-        grid-template-columns: repeat(3, 1fr) !important;
-    }}
+.stApp .stTabs [data-baseweb="tab"] p,
+.stApp .stTabs [data-baseweb="tab"] span,
+.stApp .stTabs [data-baseweb="tab"] div {{
+    color: var(--text-secondary) !important;
+    font-weight: 700 !important;
+    font-size: 0.84rem !important;
 }}
-@media (max-width: 640px) {{
-    .pipeline-grid {{
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 5px !important;
-    }}
-    .pipe-card {{
-        padding: 6px 8px !important;
-    }}
-    .pipe-value {{
-        font-size: 1.1rem !important;
-    }}
+.stApp .stTabs [data-baseweb="tab"]:hover {{
+    background-color: var(--btn-hover-bg) !important;
+    border-color: var(--border-focus) !important;
+}}
+.stApp .stTabs [data-baseweb="tab"]:hover p,
+.stApp .stTabs [data-baseweb="tab"]:hover span,
+.stApp .stTabs [data-baseweb="tab"]:hover div {{
+    color: var(--text-primary) !important;
+}}
+.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] {{
+    background: var(--tab-active-bg) !important;
+    border: 1.5px solid var(--accent-amber) !important;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2) !important;
+}}
+.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] p,
+.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] span,
+.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] div {{
+    color: var(--accent-amber) !important;
+    font-weight: 800 !important;
+}}
+.stApp .stTabs [data-baseweb="tab-highlight"],
+.stApp .stTabs [data-baseweb="tab-border"] {{
+    background-color: transparent !important;
 }}
 </style>
-""")
-
-active_theme_str = "dark" if is_dark else "light"
-saved_h = st.session_state.saved_heads
-saved_l = f"{st.session_state.saved_lots:g}"
-saved_s = st.session_state.saved_shades
-saved_w = f"{st.session_state.saved_waste:.1f}"
-saved_r = f"{st.session_state.saved_rate:.2f}"
-
-st.html(f"""
-<script>
-(function() {{
-    try {{
-        var currentUrl = new URL(window.location.href);
-        var storedRaw = localStorage.getItem("threadworks_settings");
-        var stored = storedRaw ? JSON.parse(storedRaw) : null;
-
-        // Auto-fix corrupted rate from previous sessions
-        if (stored && (stored.rate === "1.45" || parseFloat(stored.rate) > 5.0 || parseFloat(stored.rate) < 0.05)) {{
-            stored.rate = "0.45";
-            localStorage.setItem("threadworks_settings", JSON.stringify(stored));
-        }}
-
-        if (currentUrl.searchParams.get("rate") === "1.45") {{
-            currentUrl.searchParams.set("rate", "0.45");
-            window.location.replace(currentUrl.toString());
-            return;
-        }}
-
-        var activeTheme = "{active_theme_str}";
-        var activeHeads = "{saved_h}";
-        var activeLots = "{saved_l}";
-        var activeShades = "{saved_s}";
-        var activeWaste = "{saved_w}";
-        var activeRate = "{saved_r}";
-        if (activeRate === "1.45") {{ activeRate = "0.45"; }}
-
-        // Save active values to localStorage
-        var toSave = {{
-            theme: activeTheme,
-            heads: activeHeads,
-            lots: activeLots,
-            shades: activeShades,
-            waste: activeWaste,
-            rate: activeRate
-        }};
-        localStorage.setItem("threadworks_settings", JSON.stringify(toSave));
-        localStorage.setItem("threadworks_theme", activeTheme);
-
-        // If user visits bare URL without query params, restore their saved settings from browser
-        if (stored && typeof stored === "object") {{
-            var needsRedirect = false;
-            var keys = ["theme", "heads", "lots", "shades", "waste", "rate"];
-            for (var i = 0; i < keys.length; i++) {{
-                var k = keys[i];
-                var valToSet = stored[k];
-                if (k === "rate" && (valToSet === "1.45" || parseFloat(valToSet) > 5.0)) {{
-                    valToSet = "0.45";
-                }}
-                if (!currentUrl.searchParams.has(k) && valToSet !== undefined && valToSet !== null) {{
-                    currentUrl.searchParams.set(k, valToSet);
-                    needsRedirect = true;
-                }}
-            }}
-            if (needsRedirect) {{
-                window.location.replace(currentUrl.toString());
-            }}
-        }}
-    }} catch(e) {{}}
-}})();
-</script>
-""")
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TOP BRAND BAR & THEME SWITCHER
+# TOP HEADER & THEME TOGGLE
 # ═══════════════════════════════════════════════════════════════════════════
 col_hdr_main, col_hdr_theme = st.columns([8.2, 1.8])
 
 with col_hdr_main:
-    st.html(f"""
-    <div class="brand-bar">
-        <div class="brand-left">
-            <span style="font-size:1.2rem;">🧵</span>
+    st.markdown(f"""
+    <div class="brand-header">
+        <div class="brand-title-box">
+            <span class="brand-logo-icon">🧵</span>
             <div>
-                <div class="brand-title">
-                    THREADWORKS
-                    <span class="brand-badge-pro">ERP v2.4</span>
-                </div>
-                <div class="brand-sub">Factory Production & Cones Requisition Engine</div>
+                <div class="brand-main-text">Threadworks — Factory Embroidery Master</div>
+                <div class="brand-sub-text">Separate Systems: Dhaaga (Cones) Calculation & Stitch Rate (per 1,000 stitches)</div>
             </div>
         </div>
-        <div class="brand-chips">
-            <span class="chip chip-heads">⚡ {saved_h} Heads</span>
-            <span class="chip chip-lot">🎨 {saved_s} Colors / Lot</span>
-            <span class="chip chip-waste">🎯 {saved_l} Lot</span>
+        <div>
+            <span class="brand-pill">⚡ <strong>{st.session_state.saved_heads} Heads</strong></span>
+            <span class="brand-pill">🎨 <strong>{st.session_state.saved_shades} Colors</strong></span>
+            <span class="brand-pill">📦 <strong>{st.session_state.saved_lots:g} Lot</strong></span>
         </div>
     </div>
-    """)
+    """, unsafe_allow_html=True)
 
 with col_hdr_theme:
     selected_theme = st.radio(
         "Theme",
-        ["☀️ Light", "🌙 Dark"],
+        ["☀️ Light Mode", "🌙 Dark Mode"],
         index=0 if not is_dark else 1,
         horizontal=True,
         key="theme_toggle_radio",
@@ -836,11 +763,122 @@ with col_hdr_theme:
         st.query_params["theme"] = new_theme.lower()
         st.rerun()
 
+# ═══════════════════════════════════════════════════════════════════════════
+# MACHINE & ORDER SETTINGS PANEL (BUNYAADI SETTINGS)
+# ═══════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="panel-title">⚙️ Machine & Order Settings (Bunyaadi Settings)</div>', unsafe_allow_html=True)
+
+cp1, cp2, cp3, cp4, cp5, cp6 = st.columns([1.6, 1.6, 2.4, 2.0, 1.4, 1.4])
+
+with cp1:
+    machine_heads = st.number_input(
+        "Machine Heads (HEADS)",
+        min_value=1,
+        max_value=120,
+        value=int(st.session_state.saved_heads),
+        step=1,
+        help="Machine heads (Default: 28 Heads)"
+    )
+    if machine_heads != st.session_state.saved_heads:
+        st.session_state.saved_heads = machine_heads
+        st.query_params["heads"] = str(machine_heads)
+        st.rerun()
+
+with cp2:
+    base_colors_count = st.number_input(
+        "Base Shades / Colors",
+        min_value=1,
+        max_value=30,
+        value=int(st.session_state.saved_shades),
+        step=1,
+        help="Base cloth colors per lot (Default: 6 Colors)"
+    )
+    if base_colors_count != st.session_state.saved_shades:
+        st.session_state.saved_shades = base_colors_count
+        st.query_params["shades"] = str(base_colors_count)
+
+pieces_per_lot = machine_heads * base_colors_count
+
+with cp3:
+    col_q_mode, col_q_val = st.columns([1.0, 1.4])
+    with col_q_mode:
+        lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
+    with col_q_val:
+        if lots_mode == "Lots":
+            lots_count = st.number_input(
+                "Kul Lots (LOTS)",
+                min_value=0.5,
+                max_value=50.0,
+                value=float(st.session_state.saved_lots),
+                step=0.5,
+                help="Total Lots (1 Lot = 28 Heads × 6 Colors = 168 Suits)"
+            )
+            if lots_count != st.session_state.saved_lots:
+                st.session_state.saved_lots = lots_count
+                st.query_params["lots"] = f"{lots_count:g}"
+            num_pieces = int(round(pieces_per_lot * lots_count))
+        else:
+            num_pieces = st.number_input(
+                "Kul Suits (SUITS)",
+                min_value=1,
+                max_value=100000,
+                value=int(round(pieces_per_lot * st.session_state.saved_lots)),
+                step=machine_heads
+            )
+            lots_count = round(num_pieces / pieces_per_lot, 2)
+
+with cp4:
+    col_u_type, col_u_val = st.columns([1.0, 1.4])
+    with col_u_type:
+        cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
+    with col_u_val:
+        default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
+        cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
+
+with cp5:
+    waste_pct = st.number_input(
+        "Dhaaga Wastage %",
+        min_value=0.0,
+        max_value=30.0,
+        value=float(st.session_state.saved_waste),
+        step=1.0,
+        format="%.1f",
+        help="Dhaaga wastage (Auto: 0%)"
+    )
+    if waste_pct != st.session_state.saved_waste:
+        st.session_state.saved_waste = waste_pct
+        st.query_params["waste"] = f"{waste_pct:.1f}"
+
+with cp6:
+    stitch_rate = st.number_input(
+        "Stitch Rate (per 1,000)",
+        min_value=0.05,
+        max_value=10.0,
+        value=float(st.session_state.saved_rate),
+        step=0.05,
+        format="%.2f",
+        help="Rate per 1,000 stitches in PKR (Default: 1.45 Rs)"
+    )
+    if stitch_rate != st.session_state.saved_rate:
+        st.session_state.saved_rate = stitch_rate
+        st.query_params["rate"] = f"{stitch_rate:.2f}"
+
+# Quick Summary Pill Bar
+suits_per_color_calc = int(round(num_pieces / max(1, base_colors_count)))
+st.markdown(f"""
+<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:6px 12px; font-size:0.78rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+    <span>📦 <strong>Kul Order:</strong> <span style="color:var(--text-primary); font-weight:700;">{num_pieces} Suits</span> ({lots_count:g} Lots)</span>
+    <span>⚡ <strong>Machine:</strong> {machine_heads} Heads (1 Lot = {pieces_per_lot} Suits)</span>
+    <span>🎨 <strong>Har Color k Suits:</strong> <span style="color:var(--accent-amber); font-weight:700;">{suits_per_color_calc} Suits</span> ({base_colors_count} Total Shades)</span>
+    <span>🧵 <strong>Cone Size:</strong> {cone_capacity_val:,.0f} {cone_unit} (Wastage: {waste_pct:.0f}%)</span>
+    <span>💵 <strong>Stitch Rate:</strong> <span style="color:var(--accent-green); font-weight:700;">Rs {stitch_rate:.2f}</span> / 1,000 stitches</span>
+</div>
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COMPACT TOOLBAR: FILE UPLOAD & CONTROLS
+# FILE UPLOAD & CONTROLS TOOLBAR
 # ═══════════════════════════════════════════════════════════════════════════
-c_up_file, c_up_clear = st.columns([8.8, 1.2])
+c_up_file, c_up_demo, c_up_clear = st.columns([6.8, 2.2, 1.0])
 
 with c_up_file:
     uploaded_files = st.file_uploader(
@@ -851,14 +889,85 @@ with c_up_file:
         label_visibility="collapsed"
     )
 
+with c_up_demo:
+    st.markdown('<div class="demo-btn-wrap">', unsafe_allow_html=True)
+    if st.button("✨ Sample Suit Load Karein (Demo)", use_container_width=True, help="Front, Daman 4H, Sleeves 9H, Neck ka sample load karein"):
+        st.session_state.suit_design_name = "Sample_Suit_D-101"
+        st.session_state.parts = {
+            "demo_front": {
+                "design_name": "FRONT (Gala & Body)",
+                "file_name": "Front_Gala.pdf",
+                "stitches": 48500,
+                "repeat": 1.0,
+                "mode": "1_rep_all",
+                "heads": machine_heads,
+                "sequins_total": 0,
+                "total_bobbin_m": 85.0,
+                "thread_colors": [
+                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 240.0},
+                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 120.0},
+                    {"needle": 3, "code": "C-305", "name": "Resham Maroon", "length_m": 85.0}
+                ]
+            },
+            "demo_neck": {
+                "design_name": "NECK PATTI (14H Alternate)",
+                "file_name": "Neck_Patti.pdf",
+                "stitches": 22000,
+                "repeat": 1.0,
+                "mode": "1_rep_half",
+                "heads": machine_heads // 2,
+                "sequins_total": 0,
+                "total_bobbin_m": 42.0,
+                "thread_colors": [
+                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 110.0},
+                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 65.0}
+                ]
+            },
+            "demo_daman": {
+                "design_name": "DAMAN BORDER (4 Head Multi-Color)",
+                "file_name": "Daman_Border_(4_Head).pdf",
+                "stitches": 100000,
+                "repeat": 1.0,
+                "mode": "head_4",
+                "heads": round(machine_heads / base_colors_count),
+                "sequins_total": 0,
+                "total_bobbin_m": 160.0,
+                "thread_colors": [
+                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 310.0},
+                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 180.0},
+                    {"needle": 4, "code": "C-412", "name": "Rust Orange", "length_m": 140.0}
+                ]
+            },
+            "demo_sleeves": {
+                "design_name": "SLEEVES MOTIF (9 Head)",
+                "file_name": "Sleeves_Motif_(9_Head).pdf",
+                "stitches": 35000,
+                "repeat": 1.0,
+                "mode": "head_9",
+                "heads": round(machine_heads / 3),
+                "sequins_total": 0,
+                "total_bobbin_m": 60.0,
+                "thread_colors": [
+                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 95.0},
+                    {"needle": 5, "code": "C-501", "name": "Emerald Green", "length_m": 70.0}
+                ]
+            }
+        }
+        st.session_state.custom_same_overrides = {}
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
 with c_up_clear:
-    if st.button("🗑️ Clear", use_container_width=True, help="Remove all parts"):
+    st.markdown('<div class="clear-btn-wrap">', unsafe_allow_html=True)
+    if st.button("🗑️ Clear", use_container_width=True, help="Tamam parts khatam karein"):
         st.session_state.parts = {}
+        st.session_state.suit_design_name = ""
         st.session_state.custom_same_overrides = {}
         st.session_state.uploader_key += 1
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Handle Uploaded Files
+# Parse Uploaded Files
 if uploaded_files:
     for u in uploaded_files:
         c = u.getvalue()
@@ -870,6 +979,10 @@ if uploaded_files:
 
         h = hashlib.sha256(c).hexdigest()
         ext = fname.lower().rsplit(".", 1)[-1]
+        if not st.session_state.get("suit_design_name"):
+            raw_nm = fname.rsplit(".", 1)[0]
+            st.session_state.suit_design_name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', raw_nm).strip() or raw_nm.strip()
+
         if ext == "pdf":
             try:
                 parsed_parts = parse_wilcom_pdf(c, fname)
@@ -880,452 +993,234 @@ if uploaded_files:
                     if sub_h not in st.session_state.parts:
                         part_data["hash"] = sub_h
                         part_data["file_name"] = fname
-                        cfg = compute_part_heads_config(
-                            f"{fname} {part_data.get('design_name', '')}",
-                            part_data.get("repeat", 1.0),
-                            st.session_state.saved_heads,
-                            part_data
-                        )
-                        part_data["heads"] = cfg["heads"]
-                        part_data["type"] = cfg["type"]
-                        part_data["colors_in_repeat"] = cfg.get("colors", 1)
-                        part_data["tag_heads"] = cfg.get("tag_heads")
-                        part_data["size_tag"] = cfg.get("size_tag")
-                        part_data["is_size_split"] = bool(cfg.get("size_tag"))
-                        part_data["is_multi_color"] = (cfg["type"] == "multi_color")
-                        part_data["is_double_repeat"] = (cfg["type"] == "double")
                         st.session_state.parts[sub_h] = part_data
             except Exception as e:
-                st.error(f"PDF error {fname}: {e}")
+                st.error(f"PDF Parsing Error in {fname}: {e}")
         else:
             if h not in st.session_state.parts:
                 try:
                     data = parse_image_part(c, fname)
                     data["hash"] = h
                     data["file_name"] = fname
-                    cfg = compute_part_heads_config(
-                        f"{fname} {data.get('design_name', '')}",
-                        data.get("repeat", 1.0),
-                        st.session_state.saved_heads,
-                        data
-                    )
-                    data["heads"] = cfg["heads"]
-                    data["type"] = cfg["type"]
-                    data["colors_in_repeat"] = cfg.get("colors", 1)
-                    data["tag_heads"] = cfg.get("tag_heads")
-                    data["size_tag"] = cfg.get("size_tag")
-                    data["is_size_split"] = bool(cfg.get("size_tag"))
-                    data["is_multi_color"] = (cfg["type"] == "multi_color")
-                    data["is_double_repeat"] = (cfg["type"] == "double")
                     st.session_state.parts[h] = data
                 except Exception as e:
-                    st.error(f"Image error {fname}: {e}")
+                    st.error(f"Image Error in {fname}: {e}")
 
+# Empty State
 if not st.session_state.parts:
-    st.html("""
-    <div style="background:var(--bg-surface); border:1px dashed var(--border-main); border-radius:8px; padding:24px 16px; text-align:center; color:var(--text-secondary); margin:8px 0; box-shadow:var(--card-shadow);">
-        <div style="font-size:2rem; margin-bottom:6px;">📁</div>
-        <div style="font-weight:700; font-size:0.95rem; color:var(--text-primary); margin-bottom:4px;">Koi Worksheet Upload Nahi Hui</div>
-        <div style="font-size:0.8rem; max-width:520px; margin:0 auto; line-height:1.5; margin-bottom:12px;">Upar apni Wilcom PDF production worksheet ya design images upload karein taake cut-sheet aur cones calculation shuru ho sakay.</div>
+    st.markdown("""
+    <div style="background:var(--bg-surface); border:2px dashed var(--border-main); border-radius:12px; padding:32px 20px; text-align:center; color:var(--text-secondary); margin:12px 0; box-shadow:var(--card-shadow);">
+        <div style="font-size:2.8rem; margin-bottom:10px;">📁</div>
+        <div style="font-weight:800; font-size:1.15rem; color:var(--text-primary); margin-bottom:6px;">Abhi koi Worksheet Upload Nahi Hui</div>
+        <div style="font-size:0.88rem; max-width:540px; margin:0 auto; line-height:1.6; margin-bottom:16px;">
+            Upar apni Wilcom PDF production worksheet upload karein, ya foran check karne k liye upar <strong>'✨ Sample Suit Load Karein (Demo)'</strong> button dabayein.
+        </div>
     </div>
-    """)
+    """, unsafe_allow_html=True)
     st.stop()
 
-
 # ═══════════════════════════════════════════════════════════════════════════
-# COMPACT PRODUCTION PARAMETERS RIBBON
+# PARTS CUT-SHEET & HEAD SELECTION CONTROLS (PARTS & HEADS SETTING)
 # ═══════════════════════════════════════════════════════════════════════════
-st.html('<div class="section-tag">PRODUCTION PARAMETERS</div>')
+col_p_title, col_p_name = st.columns([6.6, 3.4])
+with col_p_title:
+    st.markdown('<div class="panel-title" style="margin-top:0.6rem;">📋 Design Parts, Repeat aur Head Setting</div>', unsafe_allow_html=True)
+with col_p_name:
+    if "suit_design_name" not in st.session_state or not st.session_state.suit_design_name:
+        first_p = next(iter(st.session_state.parts.values()))
+        auto_dn = first_p.get("design_name") or first_p.get("file_name", "Design").rsplit(".", 1)[0]
+        st.session_state.suit_design_name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', auto_dn).strip() or auto_dn.strip()
 
-cp1, cp2, cp3, cp4, cp5, cp6 = st.columns([1.5, 1.5, 2.4, 2.0, 1.4, 1.2])
-
-with cp1:
-    machine_heads = st.number_input(
-        "HEADS",
-        min_value=1,
-        max_value=120,
-        value=st.session_state.saved_heads,
-        step=1,
-        help="Machine heads (Default: 28)"
+    suit_name_input = st.text_input(
+        "🏷️ Design Name / Suit #:",
+        value=st.session_state.get("suit_design_name", "Design"),
+        key="suit_design_name_input",
+        help="Download hone wali tamam files ka naam is design name se banega"
     )
-    if machine_heads != st.session_state.saved_heads:
-        old_h = st.session_state.saved_heads
-        st.session_state.saved_heads = machine_heads
-        st.query_params["heads"] = str(machine_heads)
-        if "parts" in st.session_state:
-            for k, p in st.session_state.parts.items():
-                cfg = compute_part_heads_config(
-                    f"{p.get('design_name', '')} {p.get('file_name', '')}",
-                    float(p.get("repeat", 1.0)),
-                    machine_heads,
-                    p
-                )
-                p["heads"] = cfg["heads"]
-                p["type"] = cfg["type"]
-                p["colors_in_repeat"] = cfg.get("colors", 1)
-                p["tag_heads"] = cfg.get("tag_heads")
-                p["size_tag"] = cfg.get("size_tag")
-                p["is_size_split"] = bool(cfg.get("size_tag"))
-                p["is_multi_color"] = (cfg["type"] == "multi_color")
-                p["is_double_repeat"] = (cfg["type"] == "double")
-                if f"heads_g_{k}" in st.session_state:
-                    st.session_state[f"heads_g_{k}"] = cfg["heads"]
-        st.rerun()
+    if suit_name_input != st.session_state.get("suit_design_name"):
+        st.session_state.suit_design_name = suit_name_input
 
-with cp2:
-    base_colors_count = st.number_input(
-        "BASE SHADES",
-        min_value=1,
-        max_value=30,
-        value=st.session_state.saved_shades,
-        step=1,
-        help="Base cloth colors per lot (Default: 6)"
-    )
-    if base_colors_count != st.session_state.saved_shades:
-        st.session_state.saved_shades = base_colors_count
-        st.query_params["shades"] = str(base_colors_count)
-
-pieces_per_lot = machine_heads * base_colors_count
-
-with cp3:
-    col_q_mode, col_q_val = st.columns([1.1, 1.3])
-    with col_q_mode:
-        lots_mode = st.radio("MODE", ["Lots", "Pcs"], index=0, horizontal=True)
-    with col_q_val:
-        if lots_mode == "Lots":
-            lots_count = st.number_input(
-                "TOTAL LOTS",
-                min_value=0.5,
-                max_value=50.0,
-                value=st.session_state.saved_lots,
-                step=0.5,
-                help="Total Lots (Default: 1.0)"
-            )
-            if lots_count != st.session_state.saved_lots:
-                st.session_state.saved_lots = lots_count
-                st.query_params["lots"] = f"{lots_count:g}"
-            num_pieces = int(round(pieces_per_lot * lots_count))
-        else:
-            num_pieces = st.number_input(
-                "TOTAL PCS",
-                min_value=1,
-                max_value=100000,
-                value=int(round(pieces_per_lot * st.session_state.saved_lots)),
-                step=machine_heads
-            )
-            lots_count = round(num_pieces / pieces_per_lot, 2)
-
-with cp4:
-    col_u_type, col_u_val = st.columns([1.0, 1.4])
-    with col_u_type:
-        cone_unit = st.selectbox("UNIT", ["Meters", "Yards"], index=0)
-    with col_u_val:
-        default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
-        cone_capacity_val = st.number_input("CAPACITY", min_value=100.0, max_value=50000.0, value=default_cap, step=100.0)
-
-with cp5:
-    waste_pct = st.number_input(
-        "WASTE %",
-        min_value=0.0,
-        max_value=30.0,
-        value=st.session_state.saved_waste,
-        step=1.0,
-        format="%.1f",
-        help="Dhaaga wastage (Auto: 0%)"
-    )
-    if waste_pct != st.session_state.saved_waste:
-        st.session_state.saved_waste = waste_pct
-        st.query_params["waste"] = f"{waste_pct:.1f}"
-
-with cp6:
-    stitch_rate = st.number_input(
-        "RATE/1K (Rs)",
-        min_value=0.05,
-        max_value=5.0,
-        value=st.session_state.saved_rate,
-        step=0.05,
-        format="%.2f",
-        help="Stitching rate per 1,000 stitches in PKR (Factory default: 0.45 Rs / 1k st)"
-    )
-    if stitch_rate != st.session_state.saved_rate:
-        st.session_state.saved_rate = stitch_rate
-        st.query_params["rate"] = f"{stitch_rate:.2f}"
-
-# One-line Summary Banner
-suits_per_color_calc = int(round(num_pieces / max(1, base_colors_count)))
-runs_per_color_calc = round(suits_per_color_calc / max(1, machine_heads), 1)
-def_h = max(1, machine_heads)
-total_runs_preview = sum(
-    math.ceil(float(p.get("repeat", 1.0)) * (num_pieces / def_h))
-    for p in st.session_state.parts.values()
-) if st.session_state.parts else math.ceil(num_pieces / machine_heads)
-
-st.html(f"""
-<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:6px; padding:4px 10px; font-size:0.72rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px; margin-bottom:4px;">
-    <span>📦 <strong>Order:</strong> <span style="color:var(--text-primary);">{num_pieces} Suits</span> ({lots_count:g} Lots)</span>
-    <span>⚡ <strong>Machine:</strong> {machine_heads} Heads → <strong>{total_runs_preview} Total Repeat</strong></span>
-    <span>🎨 <strong>Har Color:</strong> <span style="color:var(--accent-amber); font-weight:700;">{suits_per_color_calc} Suits</span> ({runs_per_color_calc:g} Repeat / color)</span>
-    <span>🧵 <strong>Cone Size:</strong> {cone_capacity_val:,.0f} {cone_unit} (Wastage: {waste_pct:.0f}%)</span>
-</div>
-""")
-
-with st.expander("⚙️ Advanced Machine Speeds & Options (Optional)"):
-    ca1, ca2, ca3 = st.columns(3)
-    with ca1:
-        machine_rpm = st.number_input("Machine RPM", min_value=300, max_value=1200, value=DEFAULT_MACHINE_RPM, step=25)
-    with ca2:
-        shift_hours = st.selectbox("Shift Hours", [8.0, 10.0, 12.0], index=0)
-    with ca3:
-        include_boring = st.checkbox("Include Boring Tool", value=False)
-    cone_price = DEFAULT_CONE_PRICE
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# HIGH-DENSITY CUT-SHEET (SIDE-BY-SIDE 2-COLUMNS ACROSS WIDTH)
-# ═══════════════════════════════════════════════════════════════════════════
-st.html('<div class="section-tag" style="margin-top:0.4rem;">PARTS CUT-SHEET & REPEATS</div>')
+mode_options = get_part_mode_options(machine_heads, base_colors_count)
+mode_keys = list(mode_options.keys())
 
 part_keys = list(st.session_state.parts.keys())
 to_delete = None
 
-# Pre-sync any values entered into widget keys so calculations, badges,
-# and summary headers reflect the latest user input on the current rerun!
-for k in part_keys:
-    rep_key = f"rep_g_{k}"
-    heads_key = f"heads_g_{k}"
-    if rep_key in st.session_state:
-        try:
-            st.session_state.parts[k]["repeat"] = float(st.session_state[rep_key])
-        except (ValueError, TypeError):
-            pass
-    if heads_key in st.session_state:
-        try:
-            st.session_state.parts[k]["heads"] = int(st.session_state[heads_key])
-        except (ValueError, TypeError):
-            pass
+for p_key in part_keys:
+    p = st.session_state.parts[p_key]
+    dname = p.get("design_name", "Part")
+    st_raw = int(round(p.get("stitches", 0)))
+    target_str = f"{dname} {p.get('file_name', '')}"
 
-total_preview_st = 0
-total_order_runs_preview = 0
-for p in st.session_state.parts.values():
-    p_rep = float(p.get("repeat", 1.0))
-    p_h = int(p.get("heads", def_h))
-    cfg = compute_part_heads_config(
-        f"{p.get('design_name', '')} {p.get('file_name', '')}",
-        p_rep,
+    # Auto-detect repeat if not manually edited by user
+    if not p.get("_manual_repeat"):
+        auto_rep = extract_repeat_from_text(target_str)
+        if abs(auto_rep - float(p.get("repeat", 1.0))) > 0.001:
+            p["repeat"] = auto_rep
+            if not p.get("_manual_mode"):
+                p["mode"] = None
+
+    # Compute current configuration
+    cur_cfg = compute_part_heads_config(
+        target_str,
+        float(p.get("repeat", 1.0)),
         machine_heads,
+        base_colors_count,
         p
     )
-    total_preview_st += int(round(p.get("stitches", 0) * cfg["suit_mult"]))
-    if cfg["type"] == "multi_color":
-        total_order_runs_preview += math.ceil(p_rep * (num_pieces / def_h))
-    elif cfg["type"] == "double" or p_h < def_h:
-        total_order_runs_preview += math.ceil(p_rep * (num_pieces / p_h))
-    else:
-        total_order_runs_preview += math.ceil(p_rep * (num_pieces / def_h))
+    p["mode"] = cur_cfg["mode"]
+    p["repeat"] = cur_cfg["repeat"]
+    p["heads"] = cur_cfg["heads"]
 
-# Cut-sheet Header Bar
-st.html(f"""
-<div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border:1px solid var(--border-main); border-radius:6px; padding:5px 10px; margin-bottom:5px; font-size:0.74rem; flex-wrap:wrap; gap:4px;">
-    <span>Components: <strong style="color:var(--text-primary);">{len(part_keys)} Parts</strong></span>
-    <span>1 Suit: <strong style="color:var(--accent-amber); font-family:'JetBrains Mono',monospace;">{total_preview_st:,} st</strong></span>
-    <span>Grand Stitches ({num_pieces} Suits): <strong style="color:var(--accent-cyan); font-family:'JetBrains Mono',monospace;">{total_preview_st * num_pieces:,} st</strong></span>
-    <span>Kul Machine Chakar: <strong style="color:var(--accent-green); font-family:'JetBrains Mono',monospace;">{total_order_runs_preview} Total Repeat</strong></span>
-</div>
-""")
+    # Calculate live values for this part
+    p_suit_st = int(round(st_raw * cur_cfg["rate_st_mult"]))
+    p_piece_rate = (p_suit_st / 1000.0) * stitch_rate
 
-# 2 Parts Side-by-Side per row on desktop (1 doosray k samnay)
-for i in range(0, len(part_keys), 2):
-    col_c_left, col_c_right = st.columns(2)
+    p_rep_factor = float(cur_cfg["repeat"])
+    c_in_rep = max(1, cur_cfg.get("colors_in_rep", 1))
 
-    # Left Part
-    h_l = part_keys[i]
-    p_l = st.session_state.parts[h_l]
-    badge_l = "IMG" if p_l.get("is_image") else "PDF"
-    cur_rep_l = float(st.session_state.get(f"rep_g_{h_l}", p_l.get("repeat", 1.0)))
-    cur_heads_l = int(st.session_state.get(f"heads_g_{h_l}", p_l.get("heads", machine_heads)))
-    if cur_heads_l <= 0:
-        cur_heads_l = machine_heads
+    # Factory Machine Repeat Calculation:
+    # Har color par design p_rep_factor baar chalta hai:
+    # 1 Lot me machine repeats = p_rep_factor * (base_colors_count / c_in_rep)
+    # Kul Order me machine repeats = (1 Lot repeats) * lots_count
+    p_lot_rep = round(p_rep_factor * (base_colors_count / float(c_in_rep)), 1)
+    p_repeat = max(1, int(round(p_lot_rep * lots_count))) if p_rep_factor > 0 else 0
 
-    cfg_l = compute_part_heads_config(
-        f"{p_l.get('design_name', '')} {p_l.get('file_name', '')}",
-        cur_rep_l,
-        machine_heads,
-        p_l
+    # Calculate thread usage and dimensions for this part
+    p_thread_m = float(p.get("total_thread_m") or sum(tc.get("length_m", 0.0) for tc in p.get("thread_colors", [])))
+    raw_tu = str(p.get("raw_thread_usage") or "")
+    is_ft = ("ft" in raw_tu.lower()) or (p.get("thread_unit") == "ft")
+    p_width = float(p.get("width_mm") or 0.0)
+    p_height = float(p.get("height_mm") or 0.0)
+
+    # Build clean inline badges without empty lines to prevent markdown code block bug
+    b_type = cur_cfg.get("badge_type", "standard")
+    b_badge = cur_cfg.get("badge", "")
+    b_desc = cur_cfg.get("desc", "")
+
+    hdr_badges = [
+        f'<span class="badge-tag {b_type}">{b_badge}</span>',
+        f'<strong style="font-size:1.02rem; font-weight:800; color:var(--text-primary);">{dname}</strong>',
+        f'<span style="font-family:\'JetBrains Mono\',monospace; color:var(--accent-amber); font-weight:800; font-size:0.88rem;">Wilcom: {st_raw:,} st</span>'
+    ]
+    if p_width > 0:
+        if p_width > DOUBLE_HEAD_WIDTH_THRESHOLD_MM:
+            hdr_badges.append(
+                f'<span style="background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#ef4444; padding:2px 8px; border-radius:5px; font-size:0.78rem; font-weight:800; font-family:\'JetBrains Mono\',monospace;">'
+                f'📏 Width: {p_width:g}mm ➔ Auto Double Head (&gt;{DOUBLE_HEAD_WIDTH_THRESHOLD_MM:g}mm)</span>'
+            )
+        else:
+            hdr_badges.append(
+                f'<span style="font-family:\'JetBrains Mono\',monospace; color:var(--text-secondary); font-weight:700; font-size:0.84rem;">'
+                f'• 📏 Width: {p_width:g}mm</span>'
+            )
+    if p_thread_m > 0:
+        hdr_badges.append(f'<span style="font-family:\'JetBrains Mono\',monospace; color:var(--accent-cyan); font-weight:700; font-size:0.84rem;">• 🧵 Usage: {p_thread_m:,.1f}m</span>')
+    if is_ft and raw_tu:
+        hdr_badges.append(f'<span style="background:rgba(16,185,129,0.15); border:1px solid var(--accent-green); color:var(--accent-green); padding:1px 6px; border-radius:4px; font-size:0.72rem; font-weight:800; font-family:monospace;">{raw_tu} ➔ {p_thread_m:,.1f}m</span>')
+
+    hdr_html = "".join(hdr_badges)
+    card_html = (
+        f'<div class="part-card">'
+        f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">'
+        f'<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">{hdr_html}</div>'
+        f'<div style="font-size:0.85rem; font-weight:800; color:var(--text-primary);">{b_desc}</div>'
+        f'</div></div>'
     )
 
-    with col_c_left:
-        c_info, c_in_rep, c_in_heads, c_in_sub, c_in_del = st.columns([3.3, 1.7, 1.7, 2.7, 0.6])
-        with c_info:
-            badge_notice_l = f'<span class="badge-{cfg_l["badge_type"]}-erp">{cfg_l["badge"]}</span>' if cfg_l["badge"] else ""
-            st.html(f"""
-            <div style="padding-top:2px;">
-                <span class="badge-common-erp">{badge_l}</span> {badge_notice_l}
-                <div style="font-size:0.78rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="{p_l['design_name']}">{p_l['design_name']}</div>
-                <div style="font-size:0.68rem; color:var(--text-secondary); font-family:'JetBrains Mono',monospace;">{p_l['stitches']:,} st</div>
-            </div>
-            """)
-        with c_in_rep:
-            st.html('<div style="font-size:0.60rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">REPEAT</div>')
-            new_rep_l = st.number_input(
-                f"R_{h_l}",
-                min_value=0.1,
-                max_value=20.0,
-                value=cur_rep_l,
-                step=0.5,
-                format="%.1f",
-                key=f"rep_g_{h_l}",
-                label_visibility="collapsed",
-                help="Repeat (Chakar per suit)"
-            )
-            st.session_state.parts[h_l]["repeat"] = new_rep_l
-        with c_in_heads:
-            st.html('<div style="font-size:0.60rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">HEADS</div>')
-            new_heads_l = st.number_input(
-                f"H_{h_l}",
-                min_value=1,
-                max_value=120,
-                value=cur_heads_l,
-                step=1,
-                key=f"heads_g_{h_l}",
-                label_visibility="collapsed",
-                help=cfg_l.get("heads_desc", "Active Heads on Machine")
-            )
-            st.session_state.parts[h_l]["heads"] = new_heads_l
-        with c_in_sub:
-            def_h = max(1, machine_heads)
-            suit_mult_l = cfg_l["suit_mult"]
-            st_calc_l = int(round(p_l['stitches'] * suit_mult_l))
+    # Render Part Card
+    with st.container():
+        st.markdown(card_html, unsafe_allow_html=True)
 
-            if cfg_l["type"] == "multi_color":
-                p_runs_l = math.ceil(new_rep_l * (num_pieces / def_h))
-                colors_in_rep_l = cfg_l.get("colors", 3)
-                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / (def_h / colors_in_rep_l)), 1)
-                sub_badge_text_l = f"({colors_in_rep_l} clr/frame)"
-            elif cfg_l["type"] == "double" or new_heads_l < def_h:
-                p_runs_l = math.ceil(new_rep_l * (num_pieces / new_heads_l))
-                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / new_heads_l), 1)
-                sub_badge_text_l = f"({p_runs_clr_l:g}/clr)"
-            else:
-                p_runs_l = math.ceil(new_rep_l * (num_pieces / def_h))
-                p_runs_clr_l = round(new_rep_l * (suits_per_color_calc / def_h), 1)
-                sub_badge_text_l = f"({p_runs_clr_l:g}/clr)"
+        c_col1, c_col2, c_col3, c_col4 = st.columns([3.8, 2.4, 3.3, 0.5])
 
-            st.html(f"""
-            <div style="padding-top:2px;">
-                <div style="font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; color:var(--accent-amber);">
-                    = {st_calc_l:,} st
-                </div>
-                <div style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;">
-                    {p_runs_l} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">{sub_badge_text_l}</span>
-                </div>
-            </div>
-            """)
-        with c_in_del:
-            st.html('<div style="height:12px;"></div>')
-            if st.button("✕", key=f"del_g_{h_l}", help=f"Remove {p_l['design_name']}"):
-                to_delete = h_l
-
-    # Right Part (if exists)
-    if i + 1 < len(part_keys):
-        h_r = part_keys[i + 1]
-        p_r = st.session_state.parts[h_r]
-        badge_r = "IMG" if p_r.get("is_image") else "PDF"
-        cur_rep_r = float(st.session_state.get(f"rep_g_{h_r}", p_r.get("repeat", 1.0)))
-        cur_heads_r = int(st.session_state.get(f"heads_g_{h_r}", p_r.get("heads", machine_heads)))
-        if cur_heads_r <= 0:
-            cur_heads_r = machine_heads
-
-        cfg_r = compute_part_heads_config(
-            f"{p_r.get('design_name', '')} {p_r.get('file_name', '')}",
-            cur_rep_r,
-            machine_heads,
-            p_r
-        )
-
-        with col_c_right:
-            c_info_r, c_in_rep_r, c_in_heads_r, c_in_sub_r, c_in_del_r = st.columns([3.3, 1.7, 1.7, 2.7, 0.6])
-            with c_info_r:
-                badge_notice_r = f'<span class="badge-{cfg_r["badge_type"]}-erp">{cfg_r["badge"]}</span>' if cfg_r["badge"] else ""
-                st.html(f"""
-                <div style="padding-top:2px;">
-                    <span class="badge-same-erp">{badge_r}</span> {badge_notice_r}
-                    <div style="font-size:0.78rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="{p_r['design_name']}">{p_r['design_name']}</div>
-                    <div style="font-size:0.68rem; color:var(--text-secondary); font-family:'JetBrains Mono',monospace;">{p_r['stitches']:,} st</div>
-                </div>
-                """)
-            with c_in_rep_r:
-                st.html('<div style="font-size:0.60rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">REPEAT</div>')
-                new_rep_r = st.number_input(
-                    f"R_{h_r}",
-                    min_value=0.1,
-                    max_value=20.0,
-                    value=cur_rep_r,
-                    step=0.5,
-                    format="%.1f",
-                    key=f"rep_g_{h_r}",
-                    label_visibility="collapsed",
-                    help="Repeat (Chakar per suit)"
+        with c_col1:
+            col_m_sel, col_m_rep = st.columns([2.5, 1.3])
+            with col_m_sel:
+                current_mode_idx = mode_keys.index(cur_cfg["mode"]) if cur_cfg["mode"] in mode_keys else 0
+                selected_mode_label = st.selectbox(
+                    f"Head Setting ({dname})",
+                    options=[mode_options[k] for k in mode_keys],
+                    index=current_mode_idx,
+                    key=f"mode_sel_{p_key}",
+                    label_visibility="collapsed"
                 )
-                st.session_state.parts[h_r]["repeat"] = new_rep_r
-            with c_in_heads_r:
-                st.html('<div style="font-size:0.60rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">HEADS</div>')
-                new_heads_r = st.number_input(
-                    f"H_{h_r}",
+                chosen_mode_key = next(k for k, v in mode_options.items() if v == selected_mode_label)
+                if chosen_mode_key != p.get("mode"):
+                    p["mode"] = chosen_mode_key
+                    p["_manual_mode"] = True
+                    st.rerun()
+            with col_m_rep:
+                cur_rep_val = float(p.get("repeat", 1.0))
+                new_rep_val = st.number_input(
+                    "Repeat",
+                    min_value=0.1,
+                    max_value=100.0,
+                    value=cur_rep_val,
+                    step=0.5,
+                    format="%.1f" if cur_rep_val % 1 != 0 else "%.0f",
+                    key=f"rep_val_{p_key}",
+                    label_visibility="collapsed",
+                    help=f"{dname} k kitnay repeat 1 suit / piece mein hain"
+                )
+                if abs(new_rep_val - cur_rep_val) > 0.001:
+                    p["repeat"] = new_rep_val
+                    p["_manual_repeat"] = True
+                    st.rerun()
+
+        with c_col2:
+            if p.get("mode") == "custom":
+                custom_h = st.number_input(
+                    "Machine Heads",
                     min_value=1,
                     max_value=120,
-                    value=cur_heads_r,
+                    value=int(p.get("heads", machine_heads)),
                     step=1,
-                    key=f"heads_g_{h_r}",
-                    label_visibility="collapsed",
-                    help=cfg_r.get("heads_desc", "Active Heads on Machine")
+                    key=f"ch_{p_key}"
                 )
-                st.session_state.parts[h_r]["heads"] = new_heads_r
-            with c_in_sub_r:
-                def_h = max(1, machine_heads)
-                suit_mult_r = cfg_r["suit_mult"]
-                st_calc_r = int(round(p_r['stitches'] * suit_mult_r))
+                if custom_h != int(p.get("heads", machine_heads)):
+                    p["heads"] = custom_h
+                    st.rerun()
+            else:
+                rep_lot_label = f"{p_lot_rep:g} R / Lot" if lots_count > 1 else f"{p_repeat} Repeat"
+                rep_sub_label = f"(Kul: {p_repeat} R)" if lots_count > 1 else f"({p_rep_factor:g}R × {base_colors_count} Clr)"
+                st.markdown(f"""<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:6px 10px; font-size:0.82rem; font-weight:700;">
+<div style="white-space:nowrap;">🧵 Dhaaga Heads: <strong style="color:var(--accent-cyan); font-weight:800;">{cur_cfg['thread_heads']:.1f} Heads</strong></div>
+<div style="white-space:nowrap;">⚡ Machine Repeat: <strong style="color:var(--accent-green); font-weight:800;">{rep_lot_label}</strong> <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:800;">{rep_sub_label}</span></div>
+</div>""", unsafe_allow_html=True)
 
-                if cfg_r["type"] == "multi_color":
-                    p_runs_r = math.ceil(new_rep_r * (num_pieces / def_h))
-                    colors_in_rep_r = cfg_r.get("colors", 3)
-                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / (def_h / colors_in_rep_r)), 1)
-                    sub_badge_text_r = f"({colors_in_rep_r} clr/frame)"
-                elif cfg_r["type"] == "double" or new_heads_r < def_h:
-                    p_runs_r = math.ceil(new_rep_r * (num_pieces / new_heads_r))
-                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / new_heads_r), 1)
-                    sub_badge_text_r = f"({p_runs_clr_r:g}/clr)"
-                else:
-                    p_runs_r = math.ceil(new_rep_r * (num_pieces / def_h))
-                    p_runs_clr_r = round(new_rep_r * (suits_per_color_calc / def_h), 1)
-                    sub_badge_text_r = f"({p_runs_clr_r:g}/clr)"
+        with c_col3:
+            col3_html = (
+                f'<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-focus); border-radius:8px; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px;">'
+                f'<div style="min-width:0; flex-shrink:0;">'
+                f'<div style="font-size:0.68rem; color:var(--text-secondary); text-transform:uppercase; font-weight:800; letter-spacing:0.02em; white-space:nowrap;">1 Suit Stitches</div>'
+                f'<div style="font-family:\'JetBrains Mono\',monospace; font-weight:900; color:var(--accent-amber); font-size:1.02rem; white-space:nowrap;">{p_suit_st:,} st</div>'
+                f'</div>'
+                f'<div style="text-align:right; min-width:0; flex-shrink:0;">'
+                f'<div style="font-size:0.68rem; color:var(--text-secondary); text-transform:uppercase; font-weight:800; letter-spacing:0.02em; white-space:nowrap;">1 Suit ka Rate</div>'
+                f'<div style="font-family:\'JetBrains Mono\',monospace; font-weight:900; color:var(--accent-green); font-size:1.15rem; white-space:nowrap;">Rs {p_piece_rate:,.2f}</div>'
+                f'</div></div>'
+            )
+            st.markdown(col3_html, unsafe_allow_html=True)
 
-                st.html(f"""
-                <div style="padding-top:2px;">
-                    <div style="font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:800; color:var(--accent-amber);">
-                        = {st_calc_r:,} st
-                    </div>
-                    <div style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;">
-                        {p_runs_r} Repeat <span style="font-size:0.62rem; color:var(--text-secondary); font-weight:normal;">{sub_badge_text_r}</span>
-                    </div>
-                </div>
-                """)
-            with c_in_del_r:
-                st.html('<div style="height:12px;"></div>')
-                if st.button("✕", key=f"del_g_{h_r}", help=f"Remove {p_r['design_name']}"):
-                    to_delete = h_r
+        with c_col4:
+            st.markdown('<div class="del-btn-wrap" style="margin-top:2px;">', unsafe_allow_html=True)
+            if st.button("🗑️", key=f"del_{p_key}", help=f"Remove {dname}", use_container_width=True):
+                to_delete = p_key
+            st.markdown('</div>', unsafe_allow_html=True)
 
 if to_delete and to_delete in st.session_state.parts:
     del st.session_state.parts[to_delete]
     st.rerun()
 
-
 # ═══════════════════════════════════════════════════════════════════════════
-# PRODUCTION ENGINE CALCULATION
+# AGGREGATE CALCULATIONS & PRODUCTION PIPELINE
 # ═══════════════════════════════════════════════════════════════════════════
 total_suit_stitches, total_suit_sequins, total_suit_bobbin_m, colors_dict = aggregate_suit_parts(
     st.session_state.parts,
-    include_boring=include_boring if 'include_boring' in locals() else False,
-    default_heads=machine_heads
+    include_boring=False,
+    default_heads=machine_heads,
+    base_colors=base_colors_count
 )
 
 for code in colors_dict:
@@ -1344,9 +1239,9 @@ results = calculate_full_production(
     cone_unit=cone_unit,
     waste_pct=waste_pct,
     stitch_rate=stitch_rate,
-    cone_price=cone_price if 'cone_price' in locals() else DEFAULT_CONE_PRICE,
-    machine_rpm=machine_rpm if 'machine_rpm' in locals() else DEFAULT_MACHINE_RPM,
-    shift_hours=shift_hours if 'shift_hours' in locals() else DEFAULT_SHIFT_HOURS,
+    cone_price=DEFAULT_CONE_PRICE,
+    machine_rpm=DEFAULT_MACHINE_RPM,
+    shift_hours=DEFAULT_SHIFT_HOURS,
     parts=st.session_state.parts
 )
 
@@ -1354,497 +1249,223 @@ cone_rows = results["cone_rows"]
 if cone_rows:
     df_cones = pd.DataFrame(cone_rows).sort_values("Kul Cones (🧵)", ascending=False)
 else:
-    df_cones = pd.DataFrame(columns=[
-        'Needle', 'Code', 'Description', 'Type', '1 Suit (m)',
-        'Cones / Suit', 'Per Color Cones', 'Kul Cones (🧵)', 'Formula / Note',
-        'Category', 'Is_Same'
-    ])
+    df_cones = pd.DataFrame()
+
 total_order_cones = results["total_order_cones"]
 total_common_cones = results["total_common_cones"]
 total_same_cones = results["total_same_cones"]
 suits_per_base_color = results["suits_per_base_color"]
-frames_per_base_color = results["frames_per_base_color"]
 total_runs = results["total_runs"]
 shifts_needed = results["shifts_needed"]
 days_needed = results["days_needed"]
-cost_per_suit = results["cost_per_suit"]
-total_order_cost = results["total_order_cost"]
-stitching_cost_suit = results["stitching_cost_suit"]
-piece_rate = results.get("piece_rate", stitching_cost_suit)
-total_order_amount = results.get("total_order_amount", total_order_cost)
-thread_cost_suit = results["thread_cost_suit"]
-bobbin_cost_suit = results["bobbin_cost_suit"]
-total_dhaaga_suit = thread_cost_suit + bobbin_cost_suit
+piece_rate = results["piece_rate"]
+total_order_amount = results["total_order_amount"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# COMPACT PIPELINE METRIC CARDS
+# TABS (DHAAGA LIST, 1 SUIT RATE BREAKDOWN, JOB SLIP)
 # ═══════════════════════════════════════════════════════════════════════════
-st.html('<div class="section-tag">PRODUCTION PIPELINE KPI</div>')
-
-same_per_color_count = int(round(total_same_cones / max(1, base_colors_count)))
-
-st.html(f"""
-<div class="pipeline-grid">
-    <div class="pipe-card purple">
-        <div class="pipe-label">KUL DHAAGA</div>
-        <div class="pipe-value" style="color:var(--accent-purple);">{total_order_cones}</div>
-        <div class="pipe-sub">{total_same_cones} Same + {total_common_cones} Common</div>
-    </div>
-    <div class="pipe-card amber">
-        <div class="pipe-label">TOTAL PRODUCTION</div>
-        <div class="pipe-value" style="color:var(--accent-amber);">{num_pieces}</div>
-        <div class="pipe-sub">{lots_count:g} Lots · {total_runs} Repeat</div>
-    </div>
-    <div class="pipe-card cyan">
-        <div class="pipe-label">MACHINE SHIFTS</div>
-        <div class="pipe-value" style="color:var(--accent-cyan);">{shifts_needed}</div>
-        <div class="pipe-sub">~{days_needed} Din (@ 2 shifts)</div>
-    </div>
-    <div class="pipe-card green">
-        <div class="pipe-label">1 PIECE RATE</div>
-        <div class="pipe-value" style="color:var(--accent-green);">Rs {piece_rate:,.2f}</div>
-        <div class="pipe-sub">{total_suit_stitches:,} st @ Rs {stitch_rate:.2f}/1k</div>
-    </div>
-    <div class="pipe-card pink">
-        <div class="pipe-label">SAME / COLOR</div>
-        <div class="pipe-value" style="color:var(--accent-pink);">{same_per_color_count}</div>
-        <div class="pipe-sub">Cones/shade ({suits_per_base_color} pcs)</div>
-    </div>
-    <div class="pipe-card coral">
-        <div class="pipe-label">STITCHES / SUIT</div>
-        <div class="pipe-value" style="color:var(--accent-coral);">{total_suit_stitches // 1000}k</div>
-        <div class="pipe-sub">{total_suit_stitches:,} st total</div>
-    </div>
-</div>
-""")
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TABS (DHAAGA REQUISITION, 3-LEVEL, COSTING, MASTER SLIP)
-# ═══════════════════════════════════════════════════════════════════════════
-tab_req, tab_levels, tab_cost, tab_slip = st.tabs([
-    "🏪 STORE REQUISITION",
-    "📊 3-LEVEL BREAKDOWN",
-    "💰 1 PIECE RATE & BILLING",
-    "📋 MASTER JOB SLIP"
+tab_req, tab_cost, tab_slip = st.tabs([
+    "🧵 Dhaaga Order List (Cones Requisition)",
+    "💰 1 Suit Rate & Billing Breakdown",
+    "🖨️ Factory Job Slip"
 ])
 
-
 # ───────────────────────────────────────────────────────────────────────────
-# TAB 1: STORE REQUISITION (MATCHING USER REFERENCE DESIGN)
+# TAB 1: DHAAGA REQUISITION
 # ───────────────────────────────────────────────────────────────────────────
 with tab_req:
-    st.html(f"""
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:4px; font-size:0.75rem; color:var(--text-secondary);">
-        <span>Order: <strong style="color:var(--text-primary);">{num_pieces} Suits</strong> ({lots_count:g} Lots) | Machine: <strong style="color:var(--text-primary);">{machine_heads} Heads</strong> | Base Colors: <strong style="color:var(--text-primary);">{base_colors_count}</strong> ({suits_per_base_color} pcs/color) | 1 Cone: <strong style="color:var(--text-primary);">{cone_capacity_val:,.0f} {cone_unit}</strong></span>
+    st.markdown(f"""
+    <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:0.8rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span><strong>Order:</strong> {num_pieces} Suits ({lots_count:g} Lots) | <strong>Machine:</strong> {machine_heads} Heads | <strong>Base Colors:</strong> {base_colors_count} ({suits_per_base_color} suits / color)</span>
+        <span><strong>1 Cone Size:</strong> {cone_capacity_val:,.0f} {cone_unit} | <strong>Wastage:</strong> {waste_pct:.0f}%</span>
     </div>
-    """)
+    """, unsafe_allow_html=True)
 
     if not df_cones.empty:
-
-        table_html = """<div class="data-table-container">
-<table class="data-table">
-<thead>
-<tr>
-<th style="width:35px;">N#</th>
-<th>CODE</th>
-<th>DESCRIPTION</th>
-<th>TYPE</th>
-<th>1 SUIT (M)</th>
-<th>CONES / SUIT</th>
-<th>HAR COLOR CONES</th>
-<th style="color:var(--accent-amber);">KUL CONES</th>
-<th>FORMULA / DETAIL</th>
-</tr>
-</thead>
-<tbody>"""
+        table_html = """<div class="table-container">
+        <table class="modern-table">
+        <thead>
+        <tr>
+        <th style="width:40px;">Sooi # (N#)</th>
+        <th>Dhaaga Code</th>
+        <th>Shade Name</th>
+        <th>Qisam (Category)</th>
+        <th>1 Suit (Meters)</th>
+        <th>1 Cone / Suit</th>
+        <th>Har Color ki Cones</th>
+        <th style="color:var(--accent-amber);">Kul Cones (🧵)</th>
+        <th>Formula / Detail</th>
+        </tr>
+        </thead>
+        <tbody>"""
 
         for _, r in df_cones.iterrows():
             is_same = r.get("Is_Same", False)
-            badge_html = f'<span class="badge-same-erp">Same</span>' if is_same else f'<span class="badge-common-erp">Common</span>'
+            badge_html = f'<span class="badge-tag same">Matching (Same)</span>' if is_same else f'<span class="badge-tag standard">Common</span>'
             color_accent = "var(--accent-purple)" if is_same else "var(--accent-cyan)"
 
             table_html += f"""<tr>
-<td style="color:var(--text-muted); font-family:'JetBrains Mono',monospace;">{r['Needle']}</td>
-<td style="font-weight:700; color:{color_accent};">{r['Code']}</td>
-<td>{r['Description']}</td>
-<td>{badge_html}</td>
-<td style="font-family:'JetBrains Mono',monospace;">{r['1 Suit (m)']} m</td>
-<td style="font-family:'JetBrains Mono',monospace; color:var(--text-secondary);">{r['Cones / Suit']}</td>
-<td style="font-weight:600;">{r['Per Color Cones']}</td>
-<td style="font-weight:800; color:var(--accent-amber); font-family:'JetBrains Mono',monospace; font-size:0.9rem;">{r['Kul Cones (🧵)']} 🧵</td>
-<td style="color:var(--text-secondary); font-size:0.72rem;">{r['Formula / Note']}</td>
-</tr>"""
+            <td style="font-family:'JetBrains Mono',monospace; color:var(--text-muted); font-weight:700;">N#{r['Needle']}</td>
+            <td style="font-weight:700; color:{color_accent}; font-family:'JetBrains Mono',monospace;">{r['Code']}</td>
+            <td><strong>{r['Description']}</strong></td>
+            <td>{badge_html}</td>
+            <td style="font-family:'JetBrains Mono',monospace;">{r['1 Suit (m)']} m</td>
+            <td style="font-family:'JetBrains Mono',monospace; color:var(--text-secondary);">{r['Cones / Suit']:.4f}</td>
+            <td style="font-weight:600;">{r['Per Color Cones']}</td>
+            <td style="font-weight:900; color:var(--accent-amber); font-family:'JetBrains Mono',monospace; font-size:0.95rem;">{r['Kul Cones (🧵)']} 🧵</td>
+            <td style="color:var(--text-secondary); font-size:0.75rem;">{r['Formula / Note']}</td>
+            </tr>"""
 
-        table_html += """</tbody>
-</table>
-</div>"""
-        st.html(table_html)
+        table_html += """</tbody></table></div>"""
+        st.markdown(table_html, unsafe_allow_html=True)
+
+        raw_design_name = st.session_state.get("suit_design_name", "").strip() or "Design"
+        safe_design_prefix = re.sub(r'[\\/*?:"<>|]', '_', raw_design_name).strip()
+        safe_design_prefix = re.sub(r'\s+', '_', safe_design_prefix).strip('_')
+        if not safe_design_prefix:
+            safe_design_prefix = "Design"
 
         col_d1, col_d2 = st.columns(2)
         with col_d1:
+            dhaaga_csv_filename = f"{safe_design_prefix}_Dhaaga_{num_pieces}_suits.csv"
             st.download_button(
-                "📥 Requisition CSV",
+                f"📥 Dhaaga List Download Karein ({safe_design_prefix}.csv)",
                 df_cones.to_csv(index=False).encode("utf-8-sig"),
-                f"Requisition_{num_pieces}_suits.csv",
+                dhaaga_csv_filename,
                 "text/csv",
                 use_container_width=True
             )
         with col_d2:
-            store_summary_text = f"🧵 *DHAAGA REQUISITION ({num_pieces} Suits / {lots_count:g} Lots)*\n"
+            store_summary_text = f"🧵 *DHAAGA REQUISITION — {raw_design_name} ({num_pieces} Suits / {lots_count:g} Lots)*\n"
             store_summary_text += f"Machine: *{machine_heads} Heads* | Base Colors: *{base_colors_count}* ({suits_per_base_color} pcs/color)\n"
-            store_summary_text += f"1 Cone = {cone_capacity_val:,.0f} {cone_unit} (Waste: {waste_pct:.0f}%)\n\n"
+            store_summary_text += f"1 Cone = {cone_capacity_val:,.0f} {cone_unit} | Wastage: {waste_pct:.0f}%\n"
+            store_summary_text += f"Total Stitches / Suit: *{total_suit_stitches:,}* | 1 Piece Rate: *Rs {piece_rate:,.2f}*\n\n"
             for _, r in df_cones.iterrows():
                 store_summary_text += f"• Code {r['Code']} ({r['Description']}) [{r['Category']}]: *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
-            store_summary_text += f"\n*KUL CONES:* {total_order_cones} Cones\n*Total Repeat:* {total_runs}"
+            store_summary_text += f"\n*KUL CONES:* {total_order_cones} Cones\n*Total Repeat:* {total_runs} Repeat"
 
+            dhaaga_txt_filename = f"{safe_design_prefix}_WhatsApp_Dhaaga_{num_pieces}_suits.txt"
             st.download_button(
-                "📋 WhatsApp Slip Text",
+                f"📋 WhatsApp Msg Copy Karein ({safe_design_prefix}.txt)",
                 store_summary_text,
-                f"WhatsApp_{num_pieces}_suits.txt",
+                dhaaga_txt_filename,
                 "text/plain",
                 use_container_width=True
             )
     else:
-        st.info("💡 Abhi koi part ya colors upload nahi hue. Sidebar se Wilcom PDF ya Image upload karein.")
-
-
-# ───────────────────────────────────────────────────────────────────────────
-# TAB 2: 3-LEVEL BREAKDOWN (COMPACT 2-COLUMN SIDE-BY-SIDE GRID)
-# ───────────────────────────────────────────────────────────────────────────
-with tab_levels:
-    waste_mult = 1.0 + (waste_pct / 100.0)
-    color_keys = list(colors_dict.keys())
-
-    # Display 2 colors side-by-side on desktop
-    for i in range(0, len(color_keys), 2):
-        col_l2_left, col_l2_right = st.columns(2)
-
-        # Left Color
-        c_code_l = color_keys[i]
-        info_l = colors_dict[c_code_l]
-        m_suit_l = info_l["meters_1_suit"]
-        yd_suit_l = m_suit_l * METERS_TO_YARDS
-        is_same_l = info_l["is_same"]
-
-        if "Yards" in cone_unit:
-            c_per_suit_l = yd_suit_l / cone_capacity_val if cone_capacity_val > 0 else 0
-            c_color_l = (yd_suit_l * suits_per_base_color * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-            c_lot_l = (yd_suit_l * num_pieces * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-        else:
-            c_per_suit_l = m_suit_l / cone_capacity_val if cone_capacity_val > 0 else 0
-            c_color_l = (m_suit_l * suits_per_base_color * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-            c_lot_l = (m_suit_l * num_pieces * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-
-        badge_l = f'<span class="badge-same-erp">Same ({suits_per_base_color} pcs)</span>' if is_same_l else f'<span class="badge-common-erp">Common ({num_pieces} pcs)</span>'
-        color_acc_l = "var(--accent-purple)" if is_same_l else "var(--accent-cyan)"
-
-        with col_l2_left:
-            st.html(f"""
-            <div class="card-surface">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <div>
-                        <span style="color:var(--text-muted); font-family:'JetBrains Mono',monospace; font-size:0.7rem;">N#{info_l['needle']}</span>
-                        <strong style="color:{color_acc_l}; margin-left:4px; font-size:0.85rem;">{info_l['code']}</strong>
-                        <span style="color:var(--text-secondary); font-size:0.75rem; margin-left:4px;">({info_l['name']})</span>
-                    </div>
-                    <div>{badge_l}</div>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; text-align:center;">
-                    <div class="mini-box">
-                        <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:800; text-transform:uppercase;">1 SHIRT</span>
-                        <div style="font-size:0.85rem; font-weight:800; color:var(--text-primary);">{m_suit_l:.1f} m</div>
-                        <span style="font-size:0.65rem; color:var(--accent-amber);">{c_per_suit_l:.3f} c</span>
-                    </div>
-                    <div class="mini-box">
-                        <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:800; text-transform:uppercase;">HAR COLOR</span>
-                        <div style="font-size:0.85rem; font-weight:800; color:var(--accent-cyan);">{math.ceil(c_color_l) if is_same_l else math.ceil(c_lot_l)} Cones</div>
-                        <span style="font-size:0.65rem; color:var(--text-secondary);">{c_color_l:.1f} exact</span>
-                    </div>
-                    <div class="mini-box" style="border-color:var(--border-focus);">
-                        <span style="font-size:0.6rem; color:var(--accent-amber); font-weight:800; text-transform:uppercase;">TOTAL CONES</span>
-                        <div style="font-size:0.95rem; font-weight:800; color:var(--accent-amber);">
-                            {math.ceil(c_color_l) * base_colors_count if is_same_l else math.ceil(c_lot_l)} 🧵
-                        </div>
-                        <span style="font-size:0.65rem; color:var(--text-secondary);">
-                            {f"{base_colors_count} × {math.ceil(c_color_l)}" if is_same_l else "Poori Lot"}
-                        </span>
-                    </div>
-                </div>
-            </div>
-            """)
-
-        # Right Color (if exists)
-        if i + 1 < len(color_keys):
-            c_code_r = color_keys[i + 1]
-            info_r = colors_dict[c_code_r]
-            m_suit_r = info_r["meters_1_suit"]
-            yd_suit_r = m_suit_r * METERS_TO_YARDS
-            is_same_r = info_r["is_same"]
-
-            if "Yards" in cone_unit:
-                c_per_suit_r = yd_suit_r / cone_capacity_val if cone_capacity_val > 0 else 0
-                c_color_r = (yd_suit_r * suits_per_base_color * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-                c_lot_r = (yd_suit_r * num_pieces * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-            else:
-                c_per_suit_r = m_suit_r / cone_capacity_val if cone_capacity_val > 0 else 0
-                c_color_r = (m_suit_r * suits_per_base_color * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-                c_lot_r = (m_suit_r * num_pieces * waste_mult) / cone_capacity_val if cone_capacity_val > 0 else 0
-
-            badge_r = f'<span class="badge-same-erp">Same ({suits_per_base_color} pcs)</span>' if is_same_r else f'<span class="badge-common-erp">Common ({num_pieces} pcs)</span>'
-            color_acc_r = "var(--accent-purple)" if is_same_r else "var(--accent-cyan)"
-
-            with col_l2_right:
-                st.html(f"""
-                <div class="card-surface">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <div>
-                            <span style="color:var(--text-muted); font-family:'JetBrains Mono',monospace; font-size:0.7rem;">N#{info_r['needle']}</span>
-                            <strong style="color:{color_acc_r}; margin-left:4px; font-size:0.85rem;">{info_r['code']}</strong>
-                            <span style="color:var(--text-secondary); font-size:0.75rem; margin-left:4px;">({info_r['name']})</span>
-                        </div>
-                        <div>{badge_r}</div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; text-align:center;">
-                        <div class="mini-box">
-                            <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:800; text-transform:uppercase;">1 SHIRT</span>
-                            <div style="font-size:0.85rem; font-weight:800; color:var(--text-primary);">{m_suit_r:.1f} m</div>
-                            <span style="font-size:0.65rem; color:var(--accent-amber);">{c_per_suit_r:.3f} c</span>
-                        </div>
-                        <div class="mini-box">
-                            <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:800; text-transform:uppercase;">HAR COLOR</span>
-                            <div style="font-size:0.85rem; font-weight:800; color:var(--accent-cyan);">{math.ceil(c_color_r) if is_same_r else math.ceil(c_lot_r)} Cones</div>
-                            <span style="font-size:0.65rem; color:var(--text-secondary);">{c_color_r:.1f} exact</span>
-                        </div>
-                        <div class="mini-box" style="border-color:var(--border-focus);">
-                            <span style="font-size:0.6rem; color:var(--accent-amber); font-weight:800; text-transform:uppercase;">TOTAL CONES</span>
-                            <div style="font-size:0.95rem; font-weight:800; color:var(--accent-amber);">
-                                {math.ceil(c_color_r) * base_colors_count if is_same_r else math.ceil(c_lot_r)} 🧵
-                            </div>
-                            <span style="font-size:0.65rem; color:var(--text-secondary);">
-                                {f"{base_colors_count} × {math.ceil(c_color_r)}" if is_same_r else "Poori Lot"}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                """)
-
+        st.info("💡 Abhi koi dhaaga list mojood nahi hai.")
 
 # ───────────────────────────────────────────────────────────────────────────
-# ───────────────────────────────────────────────────────────────────────────
-# TAB 3: 1 PIECE RATE & ORDER BILLING
+# TAB 2: 1 SUIT RATE & ORDER BILLING
 # ───────────────────────────────────────────────────────────────────────────
 with tab_cost:
-    col_fc1, col_fc2 = st.columns([1.1, 0.9])
+    col_fc1, col_fc2 = st.columns([1.2, 0.8])
 
     with col_fc1:
-        parts_rows_html = ""
-        def_h = max(1, machine_heads)
+        st.markdown(f"""<div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:10px; padding:14px; box-shadow:var(--card-shadow); margin-bottom:12px;">
+<div style="font-size:0.85rem; font-weight:800; text-transform:uppercase; color:var(--accent-amber); margin-bottom:8px;">💵 1 Suit ka Rate Formula aur Parts Breakdown</div>
+<div style="background:var(--bg-surface-elevated); border:1.5px solid var(--accent-green); border-radius:8px; padding:12px 16px; margin-bottom:12px;">
+<div style="font-size:0.75rem; color:var(--text-secondary); font-weight:800; text-transform:uppercase;">Majmooi Formula: (Kul Stitches × Stitch Rate) ÷ 1,000</div>
+<div style="font-size:1.05rem; font-family:'JetBrains Mono',monospace; color:var(--text-primary); margin-top:4px;">(<strong>{total_suit_stitches:,}</strong> stitches × Rs <strong>{stitch_rate:.2f}</strong>) ÷ 1,000</div>
+<div style="font-size:1.8rem; font-weight:900; color:var(--accent-green); font-family:'JetBrains Mono',monospace; margin-top:6px;">= Rs {piece_rate:,.2f} <span style="font-size:0.9rem; font-weight:700; color:var(--text-secondary);">/ Suit</span></div>
+</div>
+<div style="font-size:0.78rem; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;">Har Design Part ka Alag Alag Rate Breakdown:</div>
+</div>""", unsafe_allow_html=True)
+
+        parts_table_html = """<div class="table-container">
+<table class="modern-table">
+<thead>
+<tr>
+<th>Design Part</th>
+<th>Setting</th>
+<th style="text-align:right;">Wilcom Stitches (1R)</th>
+<th style="text-align:center;">Repeat</th>
+<th style="text-align:right;">1 Suit Stitches</th>
+<th style="text-align:right; color:var(--accent-green);">1 Suit ka Rate</th>
+</tr>
+</thead>
+<tbody>"""
+
         part_runs = results.get("part_runs_details", {})
-        for h, p in st.session_state.parts.items():
-            rep = float(p.get('repeat', 1.0))
-            heads = int(p.get('heads', machine_heads))
-            cfg = compute_part_heads_config(
-                f"{p.get('design_name', '')} {p.get('file_name', '')}",
-                rep,
-                machine_heads,
-                p
-            )
-            suit_mult = cfg["suit_multiplier"]
-            p_runs = part_runs.get(h, {}).get("runs", math.ceil(rep * (num_pieces / def_h)))
-            p_st_single = int(round(p.get('stitches', 0)))
-            p_st_total = int(round(p_st_single * suit_mult))
-            p_cost = (p_st_total / 1000.0) * stitch_rate
-            badge_html = f' <span class="badge-{cfg["badge_type"]}-erp">{cfg["badge"]}</span>' if cfg.get("badge") else ""
-            parts_rows_html += f"""
-            <tr style="border-bottom:1px solid var(--border-main);">
-                <td style="padding:6px 4px;">
-                    <strong style="color:var(--text-primary);">{p.get('design_name', 'Part')}</strong>{badge_html}
-                    <div style="font-size:0.68rem; color:var(--text-secondary);">{p_st_single:,} st × {rep:g} rep</div>
-                </td>
-                <td style="text-align:center; font-family:'JetBrains Mono',monospace; padding:6px 4px; color:var(--text-primary);">
-                    {heads} H
-                </td>
-                <td style="text-align:center; font-family:'JetBrains Mono',monospace; font-weight:700; padding:6px 4px; color:var(--accent-cyan);">
-                    {p_runs}
-                </td>
-                <td style="text-align:right; font-family:'JetBrains Mono',monospace; padding:6px 4px; color:var(--text-secondary);">
-                    {p_st_total:,} st
-                </td>
-                <td style="text-align:right; font-family:'JetBrains Mono',monospace; font-weight:700; padding:6px 4px; color:var(--accent-amber);">
-                    Rs {p_cost:,.2f}
-                </td>
-            </tr>
-            """
+        for p_key, p in st.session_state.parts.items():
+            dname = p.get('design_name', 'Part')
+            st_raw = int(round(p.get('stitches', 0)))
+            p_det = part_runs.get(p_key, {})
+            p_suit_st = p_det.get("suit_stitches", st_raw)
+            p_rate = p_det.get("rate_per_piece", 0.0)
+            badge_text = p_det.get("badge", "")
+            p_rep = float(p.get("repeat", 1.0))
+            p_rep_display = f"{p_rep:g} R"
 
-        st.html(f"""
-        <div class="card-surface">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--accent-amber);">
-                    🧵 1 PIECE RATE (STITCHING RATE)
-                </span>
-                <span style="font-size:0.7rem; color:var(--accent-cyan); font-weight:700;">
-                    Formula: (Tankay × Rate) ÷ 1,000
-                </span>
-            </div>
+            parts_table_html += f"""<tr>
+<td><strong>{dname}</strong></td>
+<td><span class="badge-tag standard">{badge_text}</span></td>
+<td style="text-align:right; font-family:'JetBrains Mono',monospace; color:var(--text-secondary);">{st_raw:,}</td>
+<td style="text-align:center; font-family:'JetBrains Mono',monospace; font-weight:800; color:var(--accent-amber);">{p_rep_display}</td>
+<td style="text-align:right; font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--text-primary);">{p_suit_st:,}</td>
+<td style="text-align:right; font-family:'JetBrains Mono',monospace; font-weight:800; color:var(--accent-green);">Rs {p_rate:,.2f}</td>
+</tr>"""
 
-            <!-- Big Formula Banner -->
-            <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-focus); border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-                <div style="font-size:0.72rem; color:var(--text-secondary); margin-bottom:4px; text-transform:uppercase; font-weight:700;">
-                    Formula & Calculation:
-                </div>
-                <div style="font-size:0.92rem; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">
-                    (<strong>{total_suit_stitches:,}</strong> stitches × Rs <strong>{stitch_rate:.2f}</strong>) ÷ 1,000
-                </div>
-                <div style="font-size:1.6rem; font-weight:900; color:var(--accent-green); font-family:'JetBrains Mono',monospace; margin-top:6px;">
-                    = Rs {piece_rate:,.2f} <span style="font-size:0.85rem; font-weight:700; color:var(--text-secondary);">/ Piece</span>
-                </div>
-            </div>
+        parts_table_html += f"""<tr style="background:var(--bg-surface-elevated); font-weight:900;">
+<td colspan="4" style="color:var(--accent-green);">KUL 1 SUIT KA RATE:</td>
+<td style="text-align:right; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">{total_suit_stitches:,} st</td>
+<td style="text-align:right; font-family:'JetBrains Mono',monospace; color:var(--accent-green); font-size:1.15rem;">Rs {piece_rate:,.2f}</td>
+</tr></tbody></table></div>"""
 
-            <!-- Parts Breakdown Table -->
-            <div style="font-size:0.72rem; font-weight:800; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;">
-                SUIT KE PARTS KA RATE BREAKDOWN:
-            </div>
-            <table style="width:100%; border-collapse:collapse; font-size:0.78rem;">
-                <thead>
-                    <tr style="border-bottom:1.5px solid var(--border-focus); color:var(--text-secondary); text-align:left; font-size:0.68rem; text-transform:uppercase;">
-                        <th style="padding:4px;">Part</th>
-                        <th style="text-align:center; padding:4px;">Heads</th>
-                        <th style="text-align:center; padding:4px;">Repeat</th>
-                        <th style="text-align:right; padding:4px;">Stitches</th>
-                        <th style="text-align:right; padding:4px;">Rate (Rs)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {parts_rows_html}
-                    <tr style="background:var(--bg-surface-elevated); font-weight:900; border-top:2px solid var(--border-focus); font-size:0.85rem;">
-                        <td colspan="2" style="padding:8px 4px; color:var(--accent-green);">1 PIECE KUL RATE:</td>
-                        <td style="text-align:center; padding:8px 4px; font-family:'JetBrains Mono',monospace; color:var(--accent-cyan); font-weight:800;">{total_runs} Repeat</td>
-                        <td style="text-align:right; padding:8px 4px; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">
-                            {total_suit_stitches:,} st
-                        </td>
-                        <td style="text-align:right; padding:8px 4px; font-family:'JetBrains Mono',monospace; color:var(--accent-green); font-size:1.05rem;">
-                            Rs {piece_rate:,.2f}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        """)
+        st.markdown(parts_table_html, unsafe_allow_html=True)
 
     with col_fc2:
-        profit_pct = st.slider("MUNAFA / PROFIT MARGIN (%)", min_value=0, max_value=50, value=0, step=5)
-        
-        quoted_piece_rate = piece_rate * (1.0 + (profit_pct / 100.0))
-        quoted_order_total = quoted_piece_rate * num_pieces
-
-        margin_card_html = ""
-        if profit_pct > 0:
-            margin_card_html = f"""
-            <div style="background:var(--bg-surface-elevated); border:1px solid var(--accent-amber); border-radius:8px; padding:10px 12px; margin-top:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:0.72rem; font-weight:800; color:var(--accent-amber); text-transform:uppercase;">CLIENT QUOTATION (+{profit_pct}%)</span>
-                    <span style="font-size:0.8rem; font-weight:900; color:var(--accent-green);">+{profit_pct}% Munafa</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px;">
-                    <span style="font-size:0.75rem; color:var(--text-secondary);">Quoted 1 Piece Rate:</span>
-                    <strong style="font-size:1.1rem; font-weight:900; color:var(--accent-amber); font-family:'JetBrains Mono',monospace;">
-                        Rs {quoted_piece_rate:,.2f} / Piece
-                    </strong>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:2px;">
-                    <span style="font-size:0.75rem; color:var(--text-secondary);">Quoted Order Bill:</span>
-                    <strong style="font-size:1.15rem; font-weight:900; color:var(--accent-green); font-family:'JetBrains Mono',monospace;">
-                        Rs {quoted_order_total:,.0f}
-                    </strong>
-                </div>
-                <div style="font-size:0.68rem; color:var(--text-secondary); text-align:right; margin-top:2px;">
-                    Kul Munafa: <strong style="color:var(--accent-green);">Rs {quoted_order_total - total_order_amount:,.0f}</strong>
-                </div>
-            </div>
-            """
-
-        st.html(f"""
-        <div class="card-surface">
-            <div style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--accent-cyan); margin-bottom:10px;">
-                📦 POORI LOT / ORDER BILL
-            </div>
-
-            <!-- Total Order Box -->
-            <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
-                        ORDER QUANTITY:
-                    </span>
-                    <span style="font-size:0.85rem; font-weight:800; color:var(--accent-amber);">
-                        {num_pieces} Pieces ({lots_count:g} Lots)
-                    </span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
-                        1 PIECE RATE:
-                    </span>
-                    <span style="font-size:0.95rem; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--accent-purple);">
-                        Rs {piece_rate:,.2f}
-                    </span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
-                        GRAND TOTAL STITCHES:
-                    </span>
-                    <span style="font-size:0.85rem; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--text-primary);">
-                        {total_suit_stitches * num_pieces:,} st
-                    </span>
-                </div>
-                
-                <hr style="border:0; border-top:1px dashed var(--border-focus); margin:8px 0;" />
-                
-                <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                    <span style="font-size:0.82rem; font-weight:800; color:var(--accent-green); text-transform:uppercase;">
-                        POORI LOT KUL BILL:
-                    </span>
-                    <strong style="font-size:1.4rem; font-weight:900; color:var(--accent-green); font-family:'JetBrains Mono',monospace;">
-                        Rs {total_order_amount:,.0f}
-                    </strong>
-                </div>
-                <div style="font-size:0.68rem; color:var(--text-secondary); text-align:right; margin-top:2px;">
-                    {num_pieces} Pieces × Rs {piece_rate:,.2f}
-                </div>
-            </div>
-
-            {margin_card_html}
-        </div>
-        """)
-
+        st.markdown(f"""<div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:10px; padding:14px; box-shadow:var(--card-shadow); margin-bottom:12px;">
+<div style="font-size:0.85rem; font-weight:800; text-transform:uppercase; color:var(--accent-cyan); margin-bottom:10px;">📦 Poori Lot ka Kul Bill (Order Total Bill)</div>
+<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:12px; margin-bottom:12px;">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:700;">Kul Production:</span>
+<strong style="color:var(--accent-amber); font-weight:800;">{num_pieces} Suits ({lots_count:g} Lots)</strong>
+</div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:700;">1 Suit ka Rate:</span>
+<strong style="color:var(--accent-green); font-family:'JetBrains Mono',monospace; font-weight:900;">Rs {piece_rate:,.2f}</strong>
+</div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+<span style="font-size:0.75rem; color:var(--text-secondary); font-weight:700;">Grand Stitches:</span>
+<strong style="font-family:'JetBrains Mono',monospace; font-weight:800;">{total_suit_stitches * num_pieces:,} st</strong>
+</div>
+<hr style="border:0; border-top:1px dashed var(--border-main); margin:8px 0;" />
+<div style="display:flex; justify-content:space-between; align-items:baseline;">
+<span style="font-size:0.85rem; font-weight:800; color:var(--accent-green);">Poori Lot ka Kul Bill:</span>
+<strong style="font-size:1.45rem; font-weight:900; color:var(--accent-green); font-family:'JetBrains Mono',monospace;">Rs {total_order_amount:,.0f}</strong>
+</div>
+<div style="font-size:0.75rem; color:var(--text-secondary); text-align:right; margin-top:2px; font-weight:700;">{num_pieces} Suits × Rs {piece_rate:,.2f}</div>
+</div>
+</div>""", unsafe_allow_html=True)
 
 # ───────────────────────────────────────────────────────────────────────────
-# TAB 4: MASTER JOB SLIP
+# TAB 3: MASTER JOB SLIP
 # ───────────────────────────────────────────────────────────────────────────
 with tab_slip:
     master_slip_text = f"""============================================================
               EMBROIDERY JOB SLIP & CONES REQUISITION
 ============================================================
+Design Name: {raw_design_name}
 Order: {num_pieces} Suits ({lots_count:g} Lots) | Machine: {machine_heads} Heads
-Base Colors: {base_colors_count} Colors ({suits_per_base_color} pcs / color) | Total Machine Repeats: {total_runs}
-Total Stitches per Suit: {total_suit_stitches:,}
-Grand Stitches: {total_suit_stitches * num_pieces:,}
-Rate/1k St: Rs {stitch_rate:.2f} | 1 Piece Rate: Rs {piece_rate:,.2f} | Kul Order Bill: Rs {total_order_amount:,.0f}
-Andazan Waqt: {shifts_needed} Shifts (~{days_needed} Din @ 2 shifts/day)
-1 Cone Capacity: {cone_capacity_val:,.0f} {cone_unit} | Wastage: {waste_pct:.0f}%
+Base Colors: {base_colors_count} Colors ({suits_per_base_color} pcs / color) | Total Repeats: {total_runs} Repeat
+Total Stitches per Suit: {total_suit_stitches:,} st
+Grand Stitches: {total_suit_stitches * num_pieces:,} st
+Rate / 1,000 St: Rs {stitch_rate:.2f} | 1 Piece Rate: Rs {piece_rate:,.2f}
+Kul Order Bill ({num_pieces} pcs): Rs {total_order_amount:,.0f}
+Machine Shifts: {shifts_needed} Shifts (~{days_needed} Din @ 2 shifts/day)
+Cone Size: {cone_capacity_val:,.0f} {cone_unit} | Wastage: {waste_pct:.0f}%
 ============================================================
-SUIT KE PARTS (CUT-SHEET):
+SUIT KE PARTS (CUT-SHEET & HEADING):
 """
-    def_h = max(1, machine_heads)
     for h, p in st.session_state.parts.items():
-        rep = float(p.get('repeat', 1.0))
-        heads = int(p.get('heads', machine_heads))
-        suit_mult = rep * (heads / def_h)
-        p_runs = math.ceil(rep * (num_pieces / def_h))
-        p_st = int(round(p.get('stitches', 0) * suit_mult))
-        p_c = (p_st / 1000.0) * stitch_rate
-        dbl_tag = " [Double Repeat]" if heads < machine_heads else ""
-        master_slip_text += f"- {p['design_name']:<30} : Rep {rep:g}x | {heads} Heads ({p_runs} Repeat){dbl_tag} | {p_st:,} st -> Rs {p_c:,.2f}\n"
+        st_raw = int(round(p.get('stitches', 0)))
+        p_det = part_runs.get(h, {})
+        p_suit_st = p_det.get("suit_stitches", st_raw)
+        p_c = p_det.get("rate_per_piece", 0.0)
+        b_txt = p_det.get("badge", "")
+        master_slip_text += f"- {p['design_name']:<30} [{b_txt}]: {p_suit_st:,} st -> Rs {p_c:,.2f}\n"
 
     master_slip_text += f"""------------------------------------------------------------
 DHAAGA REQUISITION (STORE / PURCHASE):
@@ -1864,43 +1485,46 @@ Master Signature: _______________   Store Issue: ___________
 
     st.text_area("Master Slip Text", master_slip_text, height=220)
 
+    raw_design_name = st.session_state.get("suit_design_name", "").strip() or "Design"
+    safe_design_prefix = re.sub(r'[\\/*?:"<>|]', '_', raw_design_name).strip()
+    safe_design_prefix = re.sub(r'\s+', '_', safe_design_prefix).strip('_')
+    if not safe_design_prefix:
+        safe_design_prefix = "Design"
+
     col_s1, col_s2 = st.columns(2)
     with col_s1:
+        job_slip_filename = f"{safe_design_prefix}_Job_Slip_{num_pieces}_suits.txt"
         st.download_button(
-            "📥 Slip Download (.txt)",
+            f"📥 Job Slip Download Karein ({safe_design_prefix}.txt)",
             master_slip_text,
-            f"Job_Slip_{num_pieces}_suits.txt",
+            job_slip_filename,
             "text/plain",
             use_container_width=True
         )
     with col_s2:
-        whatsapp_msg = f"🧵 *EMBROIDERY JOB SLIP ({num_pieces} Suits / {lots_count:g} Lots)*\n"
+        whatsapp_msg = f"🧵 *EMBROIDERY JOB SLIP — {raw_design_name} ({num_pieces} Suits / {lots_count:g} Lots)*\n"
         whatsapp_msg += f"Machine: *{machine_heads} Heads* | Base Colors: *{base_colors_count}* ({suits_per_base_color} pcs/color)\n"
         whatsapp_msg += f"Stitches / Suit: *{total_suit_stitches:,}*\n"
         whatsapp_msg += f"*1 Piece Rate:* Rs {piece_rate:,.2f} (@ Rs {stitch_rate:.2f} / 1k st)\n"
         whatsapp_msg += f"*Kul Order Bill ({num_pieces} pcs):* Rs {total_order_amount:,.0f}\n"
         whatsapp_msg += f"1 Cone = {cone_capacity_val:,.0f} {cone_unit} (Waste: {waste_pct:.0f}%)\n\n"
-        whatsapp_msg += "*SUIT KE PARTS (CUT-SHEET):*\n"
-        def_h = max(1, machine_heads)
+        whatsapp_msg += "*SUIT KE PARTS:*\n"
         for h, p in st.session_state.parts.items():
-            rep = float(p.get('repeat', 1.0))
-            heads = int(p.get('heads', machine_heads))
-            p_runs = math.ceil(rep * (num_pieces / def_h))
-            dbl_str = " (Double Repeat)" if heads < machine_heads else ""
-            whatsapp_msg += f"• *{p['design_name']}*: Rep {rep:g}x | *{heads} Heads* ({p_runs} Repeat){dbl_str}\n"
+            p_det = part_runs.get(h, {})
+            b_txt = p_det.get("badge", "")
+            whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st -> Rs {p_det.get('rate_per_piece', 0.0):.2f}\n"
         whatsapp_msg += "\n*DHAAGA LIST:*\n"
         if not df_cones.empty:
             for _, r in df_cones.iterrows():
                 whatsapp_msg += f"- *Code {r['Code']}* ({r['Description']}): *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
-        else:
-            whatsapp_msg += "- (Koi dhaaga list mojood nahi hai)\n"
         whatsapp_msg += f"\n*KUL CONES:* {total_order_cones} Cones\n"
-        whatsapp_msg += f"*Total Repeat:* {total_runs} Repeats (~{shifts_needed} Shifts)"
+        whatsapp_msg += f"*Total Repeat:* {total_runs} Repeat (~{shifts_needed} Shifts)"
 
+        wa_slip_filename = f"{safe_design_prefix}_WhatsApp_Slip_{num_pieces}_suits.txt"
         st.download_button(
-            "📲 WhatsApp Format (.txt)",
+            f"📲 WhatsApp Format Copy Karein ({safe_design_prefix}.txt)",
             whatsapp_msg,
-            f"WhatsApp_{num_pieces}_suits.txt",
+            wa_slip_filename,
             "text/plain",
             use_container_width=True
         )
