@@ -127,6 +127,41 @@ def extract_part_attributes(name: str, repeat: float = 1.0, width_mm: float = 0.
     }
 
 
+def extract_dual_shade(raw_code: str, raw_name: str) -> tuple[str, str, str | None]:
+    """
+    Detects dual shade codes (e.g. '4118-3152', '4118/3152', '4118 - 3152')
+    where digitizers specify two shade numbers:
+    - 1st number is the Main Color (auto-picked for 100% thread/cone calculation).
+    - 2nd number is for 1 Check Shirt / sample piece.
+    Returns: (main_code, clean_name, check_code)
+    """
+    raw_c = str(raw_code or "").strip()
+    raw_n = str(raw_name or "").strip()
+    combined = f"{raw_c} {raw_n}".strip()
+
+    # Pattern 1: Pure digits separated by - or / (e.g. 4118-3152, 4118 - 3152, 4118/3152)
+    m = re.search(r'\b(\d{2,6})\s*[-/]\s*(\d{2,6})\b', combined)
+    if not m:
+        # Pattern 2: Slash between alphanumeric shade codes (e.g. M4118/M3152)
+        m = re.search(r'\b([A-Za-z0-9]{2,8})\s*/\s*([A-Za-z0-9]{2,8})\b', combined)
+
+    if m:
+        main_c = m.group(1)
+        check_c = m.group(2)
+
+        clean_n = re.sub(r'\b' + re.escape(m.group(0)) + r'\b', '', raw_n).strip()
+        clean_n = re.sub(r'^[-/\s]+|[-/\s]+$', '', clean_n).strip()
+
+        if clean_n and clean_n.lower() not in (raw_c.lower(), main_c.lower(), check_c.lower()):
+            final_name = f"{clean_n} (Check: {check_c})"
+        else:
+            final_name = f"{main_c} (Check: {check_c})"
+
+        return main_c, final_name, check_c
+
+    return raw_c, raw_n or raw_c, None
+
+
 def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
     """Extracts raw text, stitches, dimensions, and thread table from a single PDF page."""
     words = p.extract_words()
@@ -257,10 +292,12 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
             m = re.search(r'^\s*(\d+)\.\s+(\S+)\s*(.*?)\s+([\d,]+(?:\.\d+)?)\s*(m|ft|feet|yd|yards)?(?:\s|$)', txt, re.I)
             if m:
                 needle = int(m.group(1))
-                code = m.group(2).strip()
-                name = m.group(3).strip()
+                raw_code = m.group(2).strip()
+                raw_name = m.group(3).strip()
                 raw_length = float(m.group(4).replace(",", ""))
                 unit = (m.group(5) or "").lower()
+
+                code, name, check_code = extract_dual_shade(raw_code, raw_name)
 
                 # Auto-convert ft/yd to meters
                 if unit in ("ft", "feet") or (not unit and sheet_is_feet):
@@ -270,24 +307,31 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
                 else:
                     length_m = raw_length
 
-                thread_colors.append({
+                tc_item = {
                     "needle": needle,
                     "code": code,
                     "name": name if name else code,
                     "length_m": round(length_m, 2),
                     "raw_length": raw_length,
                     "raw_unit": unit or ("ft" if sheet_is_feet else "m")
-                })
+                }
+                if check_code:
+                    tc_item["check_code"] = check_code
+                    tc_item["original_code"] = raw_code
+
+                thread_colors.append(tc_item)
     else:
         # Fallback text regex
         for line_txt in full_text.splitlines():
             m = re.search(r'^\s*(\d+)\.\s+(\S+)\s*(.*?)\s+([\d,]+(?:\.\d+)?)\s*(m|ft|feet|yd|yards)?(?:\s|$)', line_txt, re.I)
             if m:
                 needle = int(m.group(1))
-                code = m.group(2).strip()
-                name = m.group(3).strip()
+                raw_code = m.group(2).strip()
+                raw_name = m.group(3).strip()
                 raw_length = float(m.group(4).replace(",", ""))
                 unit = (m.group(5) or "").lower()
+
+                code, name, check_code = extract_dual_shade(raw_code, raw_name)
 
                 # Auto-convert ft/yd to meters
                 if unit in ("ft", "feet") or (not unit and sheet_is_feet):
@@ -297,14 +341,19 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
                 else:
                     length_m = raw_length
 
-                thread_colors.append({
+                tc_item = {
                     "needle": needle,
                     "code": code,
                     "name": name if name else code,
                     "length_m": round(length_m, 2),
                     "raw_length": raw_length,
                     "raw_unit": unit or ("ft" if sheet_is_feet else "m")
-                })
+                }
+                if check_code:
+                    tc_item["check_code"] = check_code
+                    tc_item["original_code"] = raw_code
+
+                thread_colors.append(tc_item)
 
     if total_thread_m == 0.0 and thread_colors:
         total_thread_m = round(sum(tc["length_m"] for tc in thread_colors), 2)

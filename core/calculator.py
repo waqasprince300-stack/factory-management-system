@@ -1,3 +1,4 @@
+from core.parser import extract_dual_shade
 """
 Production Calculation Engine for Embroidery Operations.
 Implements Separate Systems for:
@@ -286,6 +287,16 @@ def aggregate_suit_parts(
             if is_boring_tool(raw_code, raw_name) and not include_boring:
                 continue
 
+            # Auto-extract dual shade (e.g. 4118-3152) if not already done
+            clean_code, clean_name, check_c = extract_dual_shade(raw_code, raw_name)
+            final_check = tc.get("check_code") or check_c
+            if check_c:
+                raw_code = clean_code
+                raw_name = clean_name
+                tc["code"] = clean_code
+                tc["name"] = clean_name
+                tc["check_code"] = check_c
+
             # Thread for 1 Suit and Thread for 1 Machine Frame
             part_suit_m = length_single * cfg["rate_st_mult"]
             part_frame_m = length_single * cfg["thread_heads"] * cfg["repeat"]
@@ -324,6 +335,7 @@ def aggregate_suit_parts(
                     "needle": needle,
                     "code": display_code,
                     "name": display_name,
+                    "check_code": final_check,
                     "is_same": is_same_color(raw_code, raw_name),
                     "meters_1_suit": 0.0,
                     "meters_1_frame": 0.0,
@@ -340,6 +352,8 @@ def aggregate_suit_parts(
 
                 if is_same_color(raw_code, raw_name):
                     colors_dict[target_key]["is_same"] = True
+                if not colors_dict[target_key].get("check_code") and final_check:
+                    colors_dict[target_key]["check_code"] = final_check
 
             colors_dict[target_key]["meters_1_suit"] += part_suit_m
             colors_dict[target_key]["meters_1_frame"] += part_frame_m
@@ -397,6 +411,8 @@ def calculate_full_production(
         m_1_frame = info.get("meters_1_frame", m_1_suit * machine_heads)
 
         is_same = info.get("is_same", False)
+        chk_code = info.get("check_code")
+        chk_suffix = f" [Check: {chk_code}]" if chk_code else ""
 
         # Cones per single suit
         if "Yards" in cone_unit:
@@ -419,13 +435,14 @@ def calculate_full_production(
 
             formula_note = (
                 f"{int_cones_per_shade} Cones har color ({suits_per_base_color} suits) × "
-                f"{b_count} colors = {total_same_shade_cones} Cones"
+                f"{b_count} colors = {total_same_shade_cones} Cones{chk_suffix}"
             )
 
             cone_rows.append({
                 "Needle": info["needle"],
                 "Code": info.get("code", code),
                 "Description": info["name"],
+                "Check_Code": chk_code,
                 "Category": "🟣 Matching (Same)",
                 "Is_Same": True,
                 "1 Suit (m)": round(m_1_suit, 1),
@@ -448,12 +465,13 @@ def calculate_full_production(
             total_order_cones_int += int_cones_order
             total_order_cones_exact += exact_cones_order
 
-            formula_note = f"Poori Lot ({num_pieces} suits) = {int_cones_order} Cones"
+            formula_note = f"Poori Lot ({num_pieces} suits) = {int_cones_order} Cones{chk_suffix}"
 
             cone_rows.append({
                 "Needle": info["needle"],
                 "Code": info.get("code", code),
                 "Description": info["name"],
+                "Check_Code": chk_code,
                 "Category": "🔵 Common Dhaaga",
                 "Is_Same": False,
                 "1 Suit (m)": round(m_1_suit, 1),

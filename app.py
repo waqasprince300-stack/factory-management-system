@@ -38,7 +38,7 @@ from core.config import (
     DOUBLE_HEAD_WIDTH_THRESHOLD_MM
 )
 from core.security import validate_uploaded_file
-from core.parser import parse_wilcom_pdf, parse_image_part, extract_repeat_from_text
+from core.parser import parse_wilcom_pdf, parse_image_part, extract_repeat_from_text, extract_dual_shade
 from core.calculator import (
     aggregate_suit_parts,
     calculate_full_production,
@@ -1262,6 +1262,46 @@ piece_rate = results["piece_rate"]
 total_order_amount = results["total_order_amount"]
 
 
+def format_whatsapp_row(r) -> str:
+    code = str(r.get("Code", "")).strip()
+    desc = str(r.get("Description", "")).strip()
+    is_same = r.get("Is_Same", False)
+
+    raw_chk = r.get("Check_Code")
+    chk = ""
+    if raw_chk is not None and not pd.isna(raw_chk):
+        c_str = str(raw_chk).strip()
+        if c_str.lower() not in ("none", "nan", "null", ""):
+            chk = c_str
+
+    k_cones = 0
+    keys = r.index if hasattr(r, "index") else r.keys()
+    for col in keys:
+        if "Kul Cones" in str(col):
+            k_cones = r[col]
+            break
+
+    # Clean description from redundant "(Check: ...)" if present
+    desc_clean = re.sub(r'\(Check:[^\)]+\)', '', desc).strip()
+
+    if not desc_clean or desc_clean.lower() == code.lower():
+        name_str = f"*{code}*"
+    elif code.lower() in desc_clean.lower():
+        name_str = f"*{desc_clean}*"
+    else:
+        name_str = f"*{code}* {desc_clean}"
+
+    if chk and f"Check: {chk}" not in name_str:
+        name_str += f" (Check: {chk})"
+
+    if is_same:
+        m_per = re.search(r'(\d+)\s*Cones', str(r.get("Per Color Cones", "")))
+        per_note = f" ({m_per.group(1)}/color)" if m_per else ""
+        return f"• {name_str} [Same]: *{k_cones} Cones*{per_note}"
+    else:
+        return f"• {name_str}: *{k_cones} Cones*"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TABS (DHAAGA LIST, 1 SUIT RATE BREAKDOWN, JOB SLIP)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1305,9 +1345,13 @@ with tab_req:
             badge_html = f'<span class="badge-tag same">Matching (Same)</span>' if is_same else f'<span class="badge-tag standard">Common</span>'
             color_accent = "var(--accent-purple)" if is_same else "var(--accent-cyan)"
 
+            chk_raw = r.get("Check_Code")
+            chk_valid = (chk_raw is not None and not pd.isna(chk_raw) and str(chk_raw).strip().lower() not in ("none", "nan", "null", ""))
+            chk_badge = f' <span style="background:rgba(245,158,11,0.18); color:#f59e0b; border:1px solid rgba(245,158,11,0.45); font-size:0.72rem; padding:2px 7px; border-radius:4px; font-weight:800; margin-left:6px;" title="1 Head Sample / Check Shirt">Check: {chk_raw}</span>' if chk_valid else ""
+
             table_html += f"""<tr>
             <td style="font-family:'JetBrains Mono',monospace; color:var(--text-muted); font-weight:700;">N#{r['Needle']}</td>
-            <td style="font-weight:700; color:{color_accent}; font-family:'JetBrains Mono',monospace;">{r['Code']}</td>
+            <td style="font-weight:700; color:{color_accent}; font-family:'JetBrains Mono',monospace;">{r['Code']}{chk_badge}</td>
             <td><strong>{r['Description']}</strong></td>
             <td>{badge_html}</td>
             <td style="font-family:'JetBrains Mono',monospace;">{r['1 Suit (m)']} m</td>
@@ -1337,13 +1381,15 @@ with tab_req:
                 use_container_width=True
             )
         with col_d2:
-            store_summary_text = f"🧵 *DHAAGA REQUISITION — {raw_design_name} ({num_pieces} Suits / {lots_count:g} Lots)*\n"
-            store_summary_text += f"Machine: *{machine_heads} Heads* | Base Colors: *{base_colors_count}* ({suits_per_base_color} pcs/color)\n"
-            store_summary_text += f"1 Cone = {cone_capacity_val:,.0f} {cone_unit} | Wastage: {waste_pct:.0f}%\n"
-            store_summary_text += f"Total Stitches / Suit: *{total_suit_stitches:,}* | 1 Piece Rate: *Rs {piece_rate:,.2f}*\n\n"
+            store_summary_text = f"🧵 *DHAAGA ORDER — {raw_design_name}*\n"
+            store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
+            store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
+            store_summary_text += "────────────────────────\n"
             for _, r in df_cones.iterrows():
-                store_summary_text += f"• Code {r['Code']} ({r['Description']}) [{r['Category']}]: *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
-            store_summary_text += f"\n*KUL CONES:* {total_order_cones} Cones\n*Total Repeat:* {total_runs} Repeat"
+                store_summary_text += f"{format_whatsapp_row(r)}\n"
+            store_summary_text += "────────────────────────\n"
+            store_summary_text += f"🧵 *Kul Cones:* {total_order_cones} Cones\n"
+            store_summary_text += f"🔄 *Repeat:* {total_runs} Repeat"
 
             dhaaga_txt_filename = f"{safe_design_prefix}_WhatsApp_Dhaaga_{num_pieces}_suits.txt"
             st.download_button(
@@ -1472,7 +1518,8 @@ DHAAGA REQUISITION (STORE / PURCHASE):
 """
     if not df_cones.empty:
         for _, r in df_cones.iterrows():
-            master_slip_text += f"• Code {r['Code']:<8} {r['Description'][:18]:<18} [{r['Category'][:10]}]: {r['Kul Cones (🧵)']:>3} Cones ({r['Formula / Note']})\n"
+            clean_line = format_whatsapp_row(r).replace("*", "")
+            master_slip_text += f"{clean_line}\n"
     else:
         master_slip_text += "• (Koi dhaaga list mojood nahi hai)\n"
 
@@ -1502,23 +1549,22 @@ Master Signature: _______________   Store Issue: ___________
             use_container_width=True
         )
     with col_s2:
-        whatsapp_msg = f"🧵 *EMBROIDERY JOB SLIP — {raw_design_name} ({num_pieces} Suits / {lots_count:g} Lots)*\n"
-        whatsapp_msg += f"Machine: *{machine_heads} Heads* | Base Colors: *{base_colors_count}* ({suits_per_base_color} pcs/color)\n"
-        whatsapp_msg += f"Stitches / Suit: *{total_suit_stitches:,}*\n"
-        whatsapp_msg += f"*1 Piece Rate:* Rs {piece_rate:,.2f} (@ Rs {stitch_rate:.2f} / 1k st)\n"
-        whatsapp_msg += f"*Kul Order Bill ({num_pieces} pcs):* Rs {total_order_amount:,.0f}\n"
-        whatsapp_msg += f"1 Cone = {cone_capacity_val:,.0f} {cone_unit} (Waste: {waste_pct:.0f}%)\n\n"
-        whatsapp_msg += "*SUIT KE PARTS:*\n"
+        whatsapp_msg = f"📋 *JOB SLIP — {raw_design_name}*\n"
+        whatsapp_msg += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
+        whatsapp_msg += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
+        whatsapp_msg += f"💰 Kul Bill: *Rs {total_order_amount:,.0f}*\n"
+        whatsapp_msg += f"⏱️ Shifts: ~{shifts_needed} Shifts ({days_needed} Din)\n\n"
+        whatsapp_msg += "*PARTS:*\n"
         for h, p in st.session_state.parts.items():
             p_det = part_runs.get(h, {})
             b_txt = p_det.get("badge", "")
             whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st -> Rs {p_det.get('rate_per_piece', 0.0):.2f}\n"
-        whatsapp_msg += "\n*DHAAGA LIST:*\n"
+        whatsapp_msg += "\n*DHAAGA:*\n"
         if not df_cones.empty:
             for _, r in df_cones.iterrows():
-                whatsapp_msg += f"- *Code {r['Code']}* ({r['Description']}): *{r['Kul Cones (🧵)']} Cones* ({r['Formula / Note']})\n"
-        whatsapp_msg += f"\n*KUL CONES:* {total_order_cones} Cones\n"
-        whatsapp_msg += f"*Total Repeat:* {total_runs} Repeat (~{shifts_needed} Shifts)"
+                whatsapp_msg += f"{format_whatsapp_row(r)}\n"
+        whatsapp_msg += f"────────────────────────\n"
+        whatsapp_msg += f"🧵 *Kul Cones:* {total_order_cones} Cones | 🔄 *Repeat:* {total_runs}"
 
         wa_slip_filename = f"{safe_design_prefix}_WhatsApp_Slip_{num_pieces}_suits.txt"
         st.download_button(
