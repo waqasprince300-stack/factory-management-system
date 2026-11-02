@@ -1692,7 +1692,8 @@ with tab_req:
                 store_summary_text,
                 dhaaga_txt_filename,
                 "text/plain",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_dl_dhaaga_txt_tab1"
             )
         with col_d3:
             st.download_button(
@@ -1700,7 +1701,8 @@ with tab_req:
                 job_card_pdf_bytes,
                 f"{safe_design_prefix}_Job_Card_{num_pieces}_suits.pdf",
                 "application/pdf",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_dl_pdf_tab1"
             )
         with col_d4:
             dhaaga_csv_filename = f"{safe_design_prefix}_Dhaaga_{num_pieces}_suits.csv"
@@ -1709,7 +1711,8 @@ with tab_req:
                 df_cones.to_csv(index=False).encode("utf-8-sig"),
                 dhaaga_csv_filename,
                 "text/csv",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_dl_csv_tab1"
             )
 
         with st.expander("👁️ WhatsApp Message Preview (Single-Click Copy)", expanded=False):
@@ -1884,7 +1887,8 @@ Master Signature: _______________   Store Issue: ___________
             job_card_pdf_bytes,
             f"{safe_design_prefix}_Job_Card_{num_pieces}_suits.pdf",
             "application/pdf",
-            use_container_width=True
+            use_container_width=True,
+            key="btn_dl_pdf_tab3"
         )
     with col_s3:
         job_slip_filename = f"{safe_design_prefix}_Job_Slip_{num_pieces}_suits.txt"
@@ -1893,5 +1897,6 @@ Master Signature: _______________   Store Issue: ___________
             master_slip_text,
             job_slip_filename,
             "text/plain",
-            use_container_width=True
+            use_container_width=True,
+            key="btn_dl_slip_txt_tab3"
         )
