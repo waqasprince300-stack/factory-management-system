@@ -152,46 +152,70 @@ if is_dark:
         --accent-coral: #fb923c;
         --card-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
         --card-hover-shadow: 0 8px 24px rgba(245, 158, 11, 0.18);
+        --del-btn-bg: rgba(239, 68, 68, 0.15);
+        --del-btn-border: rgba(239, 68, 68, 0.45);
+        --del-btn-text: #f87171;
+        --del-btn-hover-bg: rgba(239, 68, 68, 0.35);
+        --del-btn-hover-border: #ef4444;
+        --del-btn-hover-text: #ffffff;
+        --demo-btn-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(192, 132, 252, 0.16));
+        --demo-btn-border: #f59e0b;
+        --demo-btn-text: #f59e0b;
+        --demo-btn-hover-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(192, 132, 252, 0.28));
+        --demo-btn-hover-border: #fbbf24;
+        --demo-btn-hover-text: #ffffff;
     }
     """
 else:
     theme_css_vars = """
     :root {
         --primary-color: #d97706;
-        --background-color: #f8fafc;
+        --background-color: #f1f5f9;
         --secondary-background-color: #ffffff;
         --text-color: #0f172a;
-        --bg-main: #f8fafc;
+        --bg-main: #f1f5f9;
         --bg-surface: #ffffff;
-        --bg-surface-elevated: #f1f5f9;
-        --bg-surface-subtle: #f8fafc;
-        --border-main: #e2e8f0;
+        --bg-surface-elevated: #f8fafc;
+        --bg-surface-subtle: #f1f5f9;
+        --border-main: #cbd5e1;
         --border-focus: #d97706;
-        --border-subtle: #edf2f7;
+        --border-subtle: #e2e8f0;
         --text-primary: #0f172a;
-        --text-secondary: #475569;
+        --text-secondary: #334155;
         --text-muted: #64748b;
-        --label-color: #0f172a;
+        --label-color: #1e293b;
         --input-bg: #ffffff;
-        --input-border: #cbd5e1;
-        --btn-bg: #f8fafc;
+        --input-border: #94a3b8;
+        --btn-bg: #ffffff;
         --btn-border: #cbd5e1;
         --btn-text: #0f172a;
-        --btn-hover-bg: #f1f5f9;
+        --btn-hover-bg: #f8fafc;
         --btn-hover-border: #d97706;
-        --btn-hover-text: #0f172a;
-        --table-header-bg: #f1f5f9;
-        --table-row-hover: #f8fafc;
+        --btn-hover-text: #d97706;
+        --table-header-bg: #f8fafc;
+        --table-row-hover: #f1f5f9;
         --table-cell-border: #e2e8f0;
         --tab-active-bg: #fef3c7;
-        --accent-amber: #d97706;
-        --accent-purple: #7c3aed;
-        --accent-cyan: #0284c7;
-        --accent-green: #059669;
-        --accent-pink: #db2777;
-        --accent-coral: #ea580c;
-        --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-        --card-hover-shadow: 0 8px 20px rgba(217, 119, 6, 0.12);
+        --accent-amber: #b45309;
+        --accent-purple: #6d28d9;
+        --accent-cyan: #0369a1;
+        --accent-green: #047857;
+        --accent-pink: #be185d;
+        --accent-coral: #c2410c;
+        --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+        --card-hover-shadow: 0 8px 20px rgba(180, 83, 9, 0.14);
+        --del-btn-bg: #fee2e2;
+        --del-btn-border: #fca5a5;
+        --del-btn-text: #b91c1c;
+        --del-btn-hover-bg: #fecaca;
+        --del-btn-hover-border: #dc2626;
+        --del-btn-hover-text: #991b1b;
+        --demo-btn-bg: #fef3c7;
+        --demo-btn-border: #f59e0b;
+        --demo-btn-text: #92400e;
+        --demo-btn-hover-bg: #fde68a;
+        --demo-btn-hover-border: #d97706;
+        --demo-btn-hover-text: #78350f;
     }
     """
 
@@ -201,7 +225,7 @@ st.markdown(f"""
 
 {theme_css_vars}
 
-html, body, [class*="css"], .stApp {{
+html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {{
     background-color: var(--bg-main) !important;
     color: var(--text-primary) !important;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
@@ -334,6 +358,7 @@ html, body, [class*="css"], .stApp {{
     font-weight: 900;
     line-height: 1.2;
     margin-bottom: 3px;
+    color: var(--text-primary);
 }}
 .kpi-subtext {{
     font-size: 0.78rem;
@@ -469,6 +494,21 @@ div[data-testid="stNumberInput"] input:focus {{
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
 }}
 
+/* Text Area (Job Slip) */
+div[data-testid="stTextArea"] textarea {{
+    background-color: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: 8px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.84rem !important;
+    line-height: 1.5 !important;
+}}
+div[data-testid="stTextArea"] textarea:focus {{
+    border-color: var(--border-focus) !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
+}}
+
 /* Stepper +/- buttons in stNumberInput */
 div[data-testid="stNumberInput"] button,
 div[data-testid="stNumberInputStepDown"],
@@ -556,7 +596,7 @@ li[role="option"][aria-selected="true"] {{
     fill: var(--text-muted) !important;
 }}
 
-/* Button System */
+/* Standard Button System */
 .stButton > button,
 button[kind="primary"],
 button[kind="secondary"],
@@ -567,7 +607,7 @@ div[data-testid="stDownloadButton"] > button {{
     border-radius: 8px !important;
     font-weight: 700 !important;
     font-size: 0.84rem !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
     transition: all 0.15s ease !important;
 }}
 .stButton > button:hover,
@@ -577,47 +617,44 @@ div[data-testid="stDownloadButton"] > button:hover {{
     background-color: var(--btn-hover-bg) !important;
     color: var(--btn-hover-text) !important;
     border-color: var(--border-focus) !important;
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2) !important;
+    box-shadow: var(--card-hover-shadow) !important;
 }}
 
 /* Specialized Toolbar Buttons */
 .demo-btn-wrap .stButton > button {{
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(192, 132, 252, 0.16)) !important;
-    border: 1px solid var(--accent-amber) !important;
-    color: var(--accent-amber) !important;
+    background: var(--demo-btn-bg) !important;
+    border: 1.5px solid var(--demo-btn-border) !important;
+    color: var(--demo-btn-text) !important;
     font-weight: 800 !important;
 }}
 .demo-btn-wrap .stButton > button:hover {{
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(192, 132, 252, 0.28)) !important;
-    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
-    color: #ffffff !important;
-    border-color: #f59e0b !important;
+    background: var(--demo-btn-hover-bg) !important;
+    border-color: var(--demo-btn-hover-border) !important;
+    color: var(--demo-btn-hover-text) !important;
 }}
 .clear-btn-wrap .stButton > button {{
-    background-color: rgba(239, 68, 68, 0.1) !important;
-    border: 1px solid rgba(239, 68, 68, 0.35) !important;
-    color: #f87171 !important;
+    background: var(--del-btn-bg) !important;
+    border: 1.5px solid var(--del-btn-border) !important;
+    color: var(--del-btn-text) !important;
     font-weight: 700 !important;
 }}
 .clear-btn-wrap .stButton > button:hover {{
-    background-color: rgba(239, 68, 68, 0.24) !important;
-    border-color: #ef4444 !important;
-    color: #ffffff !important;
+    background: var(--del-btn-hover-bg) !important;
+    border-color: var(--del-btn-hover-border) !important;
+    color: var(--del-btn-hover-text) !important;
 }}
 .del-btn-wrap .stButton > button {{
-    background-color: rgba(239, 68, 68, 0.15) !important;
-    border: 1px solid rgba(239, 68, 68, 0.45) !important;
-    color: #f87171 !important;
+    background: var(--del-btn-bg) !important;
+    border: 1.5px solid var(--del-btn-border) !important;
+    color: var(--del-btn-text) !important;
     border-radius: 8px !important;
     font-size: 1.15rem !important;
     padding: 6px !important;
-    box-shadow: 0 1px 4px rgba(239, 68, 68, 0.15) !important;
 }}
 .del-btn-wrap .stButton > button:hover {{
-    background-color: rgba(239, 68, 68, 0.35) !important;
-    border-color: #ef4444 !important;
-    color: #ffffff !important;
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4) !important;
+    background: var(--del-btn-hover-bg) !important;
+    border-color: var(--del-btn-hover-border) !important;
+    color: var(--del-btn-hover-text) !important;
 }}
 
 /* File Uploader */
@@ -659,21 +696,6 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 .stApp div[data-testid="stFileUploaderFile"] svg {{
     fill: var(--text-primary) !important;
-}}
-
-/* Radio Buttons Styling */
-.stApp div[data-testid="stRadio"] > div {{
-    gap: 12px;
-}}
-.stApp div[data-testid="stRadio"] label {{
-    color: var(--text-primary) !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
-}}
-.stApp div[data-testid="stRadio"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {{
-    color: var(--text-primary) !important;
-    font-weight: 700 !important;
-    font-size: 0.82rem !important;
 }}
 
 /* Tab Styling */
@@ -736,7 +758,7 @@ with col_hdr_main:
         <div class="brand-title-box">
             <span class="brand-logo-icon">🧵</span>
             <div>
-                <div class="brand-main-text">Threadworks — Factory Embroidery Master</div>
+                <div class="brand-main-text">Threadworks • Factory Embroidery Master</div>
                 <div class="brand-sub-text">Separate Systems: Dhaaga (Cones) Calculation & Stitch Rate (per 1,000 stitches)</div>
             </div>
         </div>
@@ -749,19 +771,15 @@ with col_hdr_main:
     """, unsafe_allow_html=True)
 
 with col_hdr_theme:
-    selected_theme = st.radio(
-        "Theme",
-        ["☀️ Light Mode", "🌙 Dark Mode"],
-        index=0 if not is_dark else 1,
-        horizontal=True,
-        key="theme_toggle_radio",
-        label_visibility="collapsed"
-    )
-    new_theme = "Dark" if "Dark" in selected_theme else "Light"
-    if new_theme != st.session_state.theme_mode:
+    st.markdown('<div class="theme-toggle-wrap" style="padding-top:10px;">', unsafe_allow_html=True)
+    theme_icon = "☀️ Light Mode" if is_dark else "🌙 Dark Mode"
+    theme_tooltip = "Light Mode par switch karein" if is_dark else "Dark Mode par switch karein"
+    if st.button(theme_icon, key="theme_toggle_btn", use_container_width=True, help=theme_tooltip):
+        new_theme = "Light" if is_dark else "Dark"
         st.session_state.theme_mode = new_theme
         st.query_params["theme"] = new_theme.lower()
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # MACHINE & ORDER SETTINGS PANEL (BUNYAADI SETTINGS)
