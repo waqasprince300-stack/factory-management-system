@@ -760,7 +760,7 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 
 /* Direct WhatsApp Link Button */
-.wa-direct-btn {
+.wa-direct-btn {{
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -777,16 +777,16 @@ div[data-testid="stDownloadButton"] > button:hover {{
     width: 100%;
     text-align: center;
     box-sizing: border-box;
-}
-.wa-direct-btn:hover {
+}}
+.wa-direct-btn:hover {{
     background: linear-gradient(135deg, #2ee071, #0f796c) !important;
     box-shadow: 0 6px 18px rgba(37, 211, 102, 0.45) !important;
     transform: translateY(-1px);
     color: #ffffff !important;
-}
+}}
 
 /* Quick Mode Pill */
-.mode-pill {
+.mode-pill {{
     background: var(--bg-surface-elevated);
     border: 1px solid var(--accent-amber);
     color: var(--accent-amber);
@@ -797,7 +797,7 @@ div[data-testid="stDownloadButton"] > button:hover {{
     display: inline-flex;
     align-items: center;
     gap: 6px;
-}
+}}
 
 </style>
 """, unsafe_allow_html=True)
