@@ -279,3 +279,4 @@ def generate_job_card_pdf(
 
     doc.build(elements)
     return buffer.getvalue()
+

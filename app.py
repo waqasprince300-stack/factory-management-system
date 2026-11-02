@@ -1457,6 +1457,7 @@ shifts_needed = results["shifts_needed"]
 days_needed = results["days_needed"]
 piece_rate = results["piece_rate"]
 total_order_amount = results["total_order_amount"]
+part_runs = results.get("part_runs_details", {})
 
 
 def format_whatsapp_row(r) -> str:
