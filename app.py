@@ -712,51 +712,78 @@ div[data-testid="stDownloadButton"] > button:hover {{
     fill: var(--text-primary) !important;
 }}
 
-/* Tab Styling */
-.stApp .stTabs [data-baseweb="tab-list"] {{
+/* Tab Styling (Comprehensive & Bulletproof Contrast) */
+.stApp [data-testid="stTabs"] [data-baseweb="tab-list"],
+.stApp [data-baseweb="tab-list"] {{
     gap: 8px !important;
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-main) !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     padding: 6px !important;
+    margin-bottom: 12px !important;
 }}
-.stApp .stTabs [data-baseweb="tab"] {{
+
+/* Inactive Tab Button Base */
+.stApp [data-testid="stTabs"] [data-baseweb="tab"],
+.stApp [data-testid="stTabs"] button[role="tab"],
+.stApp [data-baseweb="tab"] {{
     background-color: var(--bg-surface-elevated) !important;
-    border: 1px solid var(--border-subtle) !important;
+    border: 1px solid var(--border-main) !important;
     border-radius: 8px !important;
-    padding: 8px 16px !important;
+    padding: 9px 18px !important;
     transition: all 0.2s ease !important;
+    cursor: pointer !important;
 }}
-.stApp .stTabs [data-baseweb="tab"] p,
-.stApp .stTabs [data-baseweb="tab"] span,
-.stApp .stTabs [data-baseweb="tab"] div {{
+
+/* Force dark readable text on all inactive tab content */
+.stApp [data-testid="stTabs"] [data-baseweb="tab"] *,
+.stApp [data-testid="stTabs"] button[role="tab"] *,
+.stApp [data-baseweb="tab"] *,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"] p,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"] span,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"] div {{
     color: var(--text-secondary) !important;
     font-weight: 700 !important;
-    font-size: 0.84rem !important;
+    font-size: 0.86rem !important;
+    letter-spacing: -0.01em !important;
 }}
-.stApp .stTabs [data-baseweb="tab"]:hover {{
+
+/* Inactive Tab Hover */
+.stApp [data-testid="stTabs"] [data-baseweb="tab"]:hover,
+.stApp [data-testid="stTabs"] button[role="tab"]:hover,
+.stApp [data-baseweb="tab"]:hover {{
     background-color: var(--btn-hover-bg) !important;
     border-color: var(--border-focus) !important;
 }}
-.stApp .stTabs [data-baseweb="tab"]:hover p,
-.stApp .stTabs [data-baseweb="tab"]:hover span,
-.stApp .stTabs [data-baseweb="tab"]:hover div {{
+.stApp [data-testid="stTabs"] [data-baseweb="tab"]:hover *,
+.stApp [data-testid="stTabs"] button[role="tab"]:hover *,
+.stApp [data-baseweb="tab"]:hover * {{
     color: var(--text-primary) !important;
 }}
-.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] {{
+
+/* Active Selected Tab */
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+.stApp [data-baseweb="tab"][aria-selected="true"] {{
     background: var(--tab-active-bg) !important;
-    border: 1.5px solid var(--accent-amber) !important;
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2) !important;
+    border: 2px solid var(--accent-amber) !important;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.22) !important;
 }}
-.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] p,
-.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] span,
-.stApp .stTabs [data-baseweb="tab"][aria-selected="true"] div {{
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] *,
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
+.stApp [data-baseweb="tab"][aria-selected="true"] *,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] span,
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] div {{
     color: var(--accent-amber) !important;
     font-weight: 800 !important;
 }}
-.stApp .stTabs [data-baseweb="tab-highlight"],
-.stApp .stTabs [data-baseweb="tab-border"] {{
+
+/* Remove default Streamlit line */
+.stApp [data-baseweb="tab-highlight"],
+.stApp [data-baseweb="tab-border"] {{
     background-color: transparent !important;
+    height: 0 !important;
 }}
 
 /* Direct WhatsApp Link Button */
