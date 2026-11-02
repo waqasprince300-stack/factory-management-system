@@ -712,36 +712,42 @@ div[data-testid="stDownloadButton"] > button:hover {{
     fill: var(--text-primary) !important;
 }}
 
-/* Tab Styling (Comprehensive & Bulletproof Contrast) */
-.stApp [data-testid="stTabs"] [data-baseweb="tab-list"],
-.stApp [data-baseweb="tab-list"] {{
-    gap: 8px !important;
+/* Tab Styling (Streamlit 1.64+ Modern React-Aria Tabs Support) */
+.stApp [data-testid="stTabs"] [role="tablist"],
+.stApp [data-testid="stTabs"] > div:first-child,
+.stApp .stTabs [role="tablist"] {{
+    gap: 10px !important;
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 12px !important;
-    padding: 6px !important;
-    margin-bottom: 12px !important;
+    padding: 6px 8px !important;
+    margin-bottom: 14px !important;
+    display: flex !important;
+    align-items: center !important;
 }}
 
-/* Inactive Tab Button Base */
-.stApp [data-testid="stTabs"] [data-baseweb="tab"],
+/* All Inactive Tabs Base */
+.stApp [data-testid="stTabs"] [data-testid="stTab"],
+.stApp [data-testid="stTab"],
 .stApp [data-testid="stTabs"] button[role="tab"],
 .stApp [data-baseweb="tab"] {{
     background-color: var(--bg-surface-elevated) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 8px !important;
-    padding: 9px 18px !important;
+    padding: 8px 16px !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 38px !important;
     transition: all 0.2s ease !important;
     cursor: pointer !important;
 }}
 
-/* Force dark readable text on all inactive tab content */
-.stApp [data-testid="stTabs"] [data-baseweb="tab"] *,
-.stApp [data-testid="stTabs"] button[role="tab"] *,
-.stApp [data-baseweb="tab"] *,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"] p,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"] span,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"] div {{
+/* Unselected Inactive Tab Text (Force high-contrast text) */
+.stApp [data-testid="stTabs"] [data-testid="stTab"] *,
+.stApp [data-testid="stTab"] *,
+.stApp [data-testid="stTabs"] [data-testid="stTab"] p,
+.stApp [data-testid="stTabs"] [data-testid="stTab"] span,
+.stApp [data-testid="stTabs"] [data-testid="stTab"] div {{
     color: var(--text-secondary) !important;
     font-weight: 700 !important;
     font-size: 0.86rem !important;
@@ -749,41 +755,41 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 
 /* Inactive Tab Hover */
-.stApp [data-testid="stTabs"] [data-baseweb="tab"]:hover,
-.stApp [data-testid="stTabs"] button[role="tab"]:hover,
-.stApp [data-baseweb="tab"]:hover {{
+.stApp [data-testid="stTabs"] [data-testid="stTab"]:hover,
+.stApp [data-testid="stTab"]:hover {{
     background-color: var(--btn-hover-bg) !important;
     border-color: var(--border-focus) !important;
 }}
-.stApp [data-testid="stTabs"] [data-baseweb="tab"]:hover *,
-.stApp [data-testid="stTabs"] button[role="tab"]:hover *,
-.stApp [data-baseweb="tab"]:hover * {{
+.stApp [data-testid="stTabs"] [data-testid="stTab"]:hover *,
+.stApp [data-testid="stTab"]:hover * {{
     color: var(--text-primary) !important;
 }}
 
 /* Active Selected Tab */
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
-.stApp [data-baseweb="tab"][aria-selected="true"] {{
+.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"],
+.stApp [data-testid="stTab"][aria-selected="true"],
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{
     background: var(--tab-active-bg) !important;
     border: 2px solid var(--accent-amber) !important;
-    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.22) !important;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
 }}
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] *,
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
-.stApp [data-baseweb="tab"][aria-selected="true"] *,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] span,
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] div {{
+.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] *,
+.stApp [data-testid="stTab"][aria-selected="true"] *,
+.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] p,
+.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] span,
+.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] div {{
     color: var(--accent-amber) !important;
     font-weight: 800 !important;
 }}
 
-/* Remove default Streamlit line */
+/* Remove default Streamlit red underline and highlight line */
+.stApp [data-testid="stTabs"] .react-aria-SelectionIndicator,
+.stApp [data-testid="stTab"] .react-aria-SelectionIndicator,
 .stApp [data-baseweb="tab-highlight"],
 .stApp [data-baseweb="tab-border"] {{
-    background-color: transparent !important;
+    display: none !important;
     height: 0 !important;
+    background-color: transparent !important;
 }}
 
 /* Direct WhatsApp Link Button */
