@@ -9,6 +9,7 @@ Complete Roman Urdu Interface for Pakistani Embroidery Factory Operations.
 import hashlib
 import math
 import re
+import urllib.parse
 import pandas as pd
 import streamlit as st
 import importlib
@@ -18,11 +19,13 @@ import core.config
 import core.security
 import core.parser
 import core.calculator
+import core.pdf_report
 
 importlib.reload(core.config)
 importlib.reload(core.security)
 importlib.reload(core.parser)
 importlib.reload(core.calculator)
+importlib.reload(core.pdf_report)
 
 from core.config import (
     DEFAULT_MACHINE_HEADS,
@@ -39,6 +42,7 @@ from core.config import (
 )
 from core.security import validate_uploaded_file
 from core.parser import parse_wilcom_pdf, parse_image_part, extract_repeat_from_text, extract_dual_shade
+from core.pdf_report import generate_job_card_pdf
 from core.calculator import (
     aggregate_suit_parts,
     calculate_full_production,
@@ -108,6 +112,16 @@ if "uploader_key" not in st.session_state:
 
 if "custom_same_overrides" not in st.session_state:
     st.session_state.custom_same_overrides = {}
+
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "quick"
+
+if "bobbin_cone_cap" not in st.session_state:
+    st.session_state.bobbin_cone_cap = 10000.0
+
+if "bobbin_color" not in st.session_state:
+    st.session_state.bobbin_color = "White (Sufaid)"
+
 
 is_dark = (st.session_state.theme_mode == "Dark")
 
@@ -744,21 +758,65 @@ div[data-testid="stDownloadButton"] > button:hover {{
 .stApp .stTabs [data-baseweb="tab-border"] {{
     background-color: transparent !important;
 }}
+
+/* Direct WhatsApp Link Button */
+.wa-direct-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #25d366, #128c7e) !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 0.88rem !important;
+    padding: 10px 16px !important;
+    border-radius: 8px !important;
+    text-decoration: none !important;
+    box-shadow: 0 3px 12px rgba(37, 211, 102, 0.3) !important;
+    transition: all 0.2s ease !important;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+}
+.wa-direct-btn:hover {
+    background: linear-gradient(135deg, #2ee071, #0f796c) !important;
+    box-shadow: 0 6px 18px rgba(37, 211, 102, 0.45) !important;
+    transform: translateY(-1px);
+    color: #ffffff !important;
+}
+
+/* Quick Mode Pill */
+.mode-pill {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--accent-amber);
+    color: var(--accent-amber);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.76rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TOP HEADER & THEME TOGGLE
 # ═══════════════════════════════════════════════════════════════════════════
-col_hdr_main, col_hdr_theme = st.columns([8.2, 1.8])
+is_quick = (st.session_state.get("app_mode", "quick") == "quick")
+
+col_hdr_main, col_hdr_theme = st.columns([7.4, 2.6])
 
 with col_hdr_main:
+    mode_tag = '<span class="mode-pill">⚡ Quick Mode (Fast)</span>' if is_quick else '<span class="mode-pill" style="border-color:var(--accent-purple); color:var(--accent-purple);">📊 Detailed ERP</span>'
     st.markdown(f"""
     <div class="brand-header">
         <div class="brand-title-box">
             <span class="brand-logo-icon">🧵</span>
             <div>
-                <div class="brand-main-text">Threadworks • Factory Embroidery Master</div>
+                <div class="brand-main-text">Threadworks • Factory Embroidery Master {mode_tag}</div>
                 <div class="brand-sub-text">Separate Systems: Dhaaga (Cones) Calculation & Stitch Rate (per 1,000 stitches)</div>
             </div>
         </div>
@@ -771,115 +829,228 @@ with col_hdr_main:
     """, unsafe_allow_html=True)
 
 with col_hdr_theme:
-    st.markdown('<div class="theme-toggle-wrap" style="padding-top:10px;">', unsafe_allow_html=True)
-    theme_icon = "☀️ Light Mode" if is_dark else "🌙 Dark Mode"
-    theme_tooltip = "Light Mode par switch karein" if is_dark else "Dark Mode par switch karein"
-    if st.button(theme_icon, key="theme_toggle_btn", use_container_width=True, help=theme_tooltip):
-        new_theme = "Light" if is_dark else "Dark"
-        st.session_state.theme_mode = new_theme
-        st.query_params["theme"] = new_theme.lower()
-        st.rerun()
+    st.markdown('<div class="theme-toggle-wrap" style="padding-top:8px;">', unsafe_allow_html=True)
+    btn_m1, btn_m2 = st.columns(2)
+    with btn_m1:
+        mode_btn_label = "📊 Detail" if is_quick else "⚡ Quick"
+        mode_btn_tip = "Detailed mode par switch karein" if is_quick else "Quick mode par switch karein"
+        if st.button(mode_btn_label, key="app_mode_toggle_btn", use_container_width=True, help=mode_btn_tip):
+            st.session_state.app_mode = "detailed" if is_quick else "quick"
+            st.rerun()
+    with btn_m2:
+        theme_icon = "☀️ Light" if is_dark else "🌙 Dark"
+        theme_tooltip = "Light Mode par switch karein" if is_dark else "Dark Mode par switch karein"
+        if st.button(theme_icon, key="theme_toggle_btn", use_container_width=True, help=theme_tooltip):
+            new_theme = "Light" if is_dark else "Dark"
+            st.session_state.theme_mode = new_theme
+            st.query_params["theme"] = new_theme.lower()
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # MACHINE & ORDER SETTINGS PANEL (BUNYAADI SETTINGS)
 # ═══════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="panel-title">⚙️ Machine & Order Settings (Bunyaadi Settings)</div>', unsafe_allow_html=True)
+if is_quick:
+    st.markdown('<div class="panel-title">⚡ Quick Order Settings (Machine, Order, Rate)</div>', unsafe_allow_html=True)
+    qp1, qp2, qp3, qp4 = st.columns([1.8, 1.8, 3.4, 2.0])
 
-cp1, cp2, cp3, cp4, cp5, cp6 = st.columns([1.6, 1.6, 2.4, 2.0, 1.4, 1.4])
+    with qp1:
+        machine_heads = st.number_input(
+            "Machine Heads",
+            min_value=1,
+            max_value=120,
+            value=int(st.session_state.saved_heads),
+            step=1,
+            help="Total machine heads (Default: 30 / 28 Heads)"
+        )
+        if machine_heads != st.session_state.saved_heads:
+            st.session_state.saved_heads = machine_heads
+            st.query_params["heads"] = str(machine_heads)
+            st.rerun()
 
-with cp1:
-    machine_heads = st.number_input(
-        "Machine Heads (HEADS)",
-        min_value=1,
-        max_value=120,
-        value=int(st.session_state.saved_heads),
-        step=1,
-        help="Machine heads (Default: 28 Heads)"
-    )
-    if machine_heads != st.session_state.saved_heads:
-        st.session_state.saved_heads = machine_heads
-        st.query_params["heads"] = str(machine_heads)
-        st.rerun()
+    with qp2:
+        base_colors_count = st.number_input(
+            "Base Shades / Colors",
+            min_value=1,
+            max_value=30,
+            value=int(st.session_state.saved_shades),
+            step=1,
+            help="Base cloth colors per lot (Default: 6 Colors)"
+        )
+        if base_colors_count != st.session_state.saved_shades:
+            st.session_state.saved_shades = base_colors_count
+            st.query_params["shades"] = str(base_colors_count)
 
-with cp2:
-    base_colors_count = st.number_input(
-        "Base Shades / Colors",
-        min_value=1,
-        max_value=30,
-        value=int(st.session_state.saved_shades),
-        step=1,
-        help="Base cloth colors per lot (Default: 6 Colors)"
-    )
-    if base_colors_count != st.session_state.saved_shades:
-        st.session_state.saved_shades = base_colors_count
-        st.query_params["shades"] = str(base_colors_count)
+    pieces_per_lot = machine_heads * base_colors_count
 
-pieces_per_lot = machine_heads * base_colors_count
+    with qp3:
+        col_q_mode, col_q_val = st.columns([1.0, 1.4])
+        with col_q_mode:
+            lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
+        with col_q_val:
+            if lots_mode == "Lots":
+                lots_count = st.number_input(
+                    "Kul Lots (LOTS)",
+                    min_value=0.5,
+                    max_value=50.0,
+                    value=float(st.session_state.saved_lots),
+                    step=0.5,
+                    help=f"Total Lots (1 Lot = {pieces_per_lot} Suits)"
+                )
+                if lots_count != st.session_state.saved_lots:
+                    st.session_state.saved_lots = lots_count
+                    st.query_params["lots"] = f"{lots_count:g}"
+                num_pieces = int(round(pieces_per_lot * lots_count))
+            else:
+                num_pieces = st.number_input(
+                    "Kul Suits (SUITS)",
+                    min_value=1,
+                    max_value=100000,
+                    value=int(round(pieces_per_lot * st.session_state.saved_lots)),
+                    step=machine_heads
+                )
+                lots_count = round(num_pieces / pieces_per_lot, 2)
 
-with cp3:
-    col_q_mode, col_q_val = st.columns([1.0, 1.4])
-    with col_q_mode:
-        lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
-    with col_q_val:
-        if lots_mode == "Lots":
-            lots_count = st.number_input(
-                "Kul Lots (LOTS)",
-                min_value=0.5,
-                max_value=50.0,
-                value=float(st.session_state.saved_lots),
-                step=0.5,
-                help="Total Lots (1 Lot = 28 Heads × 6 Colors = 168 Suits)"
-            )
-            if lots_count != st.session_state.saved_lots:
-                st.session_state.saved_lots = lots_count
-                st.query_params["lots"] = f"{lots_count:g}"
-            num_pieces = int(round(pieces_per_lot * lots_count))
-        else:
-            num_pieces = st.number_input(
-                "Kul Suits (SUITS)",
-                min_value=1,
-                max_value=100000,
-                value=int(round(pieces_per_lot * st.session_state.saved_lots)),
-                step=machine_heads
-            )
-            lots_count = round(num_pieces / pieces_per_lot, 2)
+    with qp4:
+        stitch_rate = st.number_input(
+            "Stitch Rate (per 1,000)",
+            min_value=0.05,
+            max_value=10.0,
+            value=float(st.session_state.saved_rate),
+            step=0.05,
+            format="%.2f",
+            help="Rate per 1,000 stitches in PKR"
+        )
+        if stitch_rate != st.session_state.saved_rate:
+            st.session_state.saved_rate = stitch_rate
+            st.query_params["rate"] = f"{stitch_rate:.2f}"
 
-with cp4:
-    col_u_type, col_u_val = st.columns([1.0, 1.4])
-    with col_u_type:
-        cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
-    with col_u_val:
-        default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
-        cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
+    # Collapsed Quick Mode Advance Options (Cone Size, Wastage, Bobbin)
+    with st.expander("⚙️ Dhaaga Size, Wastage % aur Bobbin (Khicha) Options", expanded=False):
+        ap1, ap2, ap3, ap4, ap5 = st.columns([1.5, 2.0, 1.8, 2.3, 2.4])
+        with ap1:
+            cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
+        with ap2:
+            default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
+            cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
+        with ap3:
+            waste_pct = st.number_input("Wastage %", min_value=0.0, max_value=30.0, value=float(st.session_state.saved_waste), step=1.0, format="%.1f")
+            if waste_pct != st.session_state.saved_waste:
+                st.session_state.saved_waste = waste_pct
+                st.query_params["waste"] = f"{waste_pct:.1f}"
+        with ap4:
+            bobbin_cone_capacity = st.number_input("Bobbin Cone (m)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
+            st.session_state.bobbin_cone_cap = bobbin_cone_capacity
+        with ap5:
+            bobbin_color = st.selectbox("Bobbin Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
+            st.session_state.bobbin_color = bobbin_color
 
-with cp5:
-    waste_pct = st.number_input(
-        "Dhaaga Wastage %",
-        min_value=0.0,
-        max_value=30.0,
-        value=float(st.session_state.saved_waste),
-        step=1.0,
-        format="%.1f",
-        help="Dhaaga wastage (Auto: 0%)"
-    )
-    if waste_pct != st.session_state.saved_waste:
-        st.session_state.saved_waste = waste_pct
-        st.query_params["waste"] = f"{waste_pct:.1f}"
+else:
+    # Detailed ERP Settings Mode
+    st.markdown('<div class="panel-title">⚙️ Machine & Order Settings (Detailed Mode)</div>', unsafe_allow_html=True)
+    cp1, cp2, cp3, cp4, cp5, cp6 = st.columns([1.6, 1.6, 2.4, 2.0, 1.4, 1.4])
 
-with cp6:
-    stitch_rate = st.number_input(
-        "Stitch Rate (per 1,000)",
-        min_value=0.05,
-        max_value=10.0,
-        value=float(st.session_state.saved_rate),
-        step=0.05,
-        format="%.2f",
-        help="Rate per 1,000 stitches in PKR (Default: 1.45 Rs)"
-    )
-    if stitch_rate != st.session_state.saved_rate:
-        st.session_state.saved_rate = stitch_rate
-        st.query_params["rate"] = f"{stitch_rate:.2f}"
+    with cp1:
+        machine_heads = st.number_input(
+            "Machine Heads (HEADS)",
+            min_value=1,
+            max_value=120,
+            value=int(st.session_state.saved_heads),
+            step=1,
+            help="Machine heads"
+        )
+        if machine_heads != st.session_state.saved_heads:
+            st.session_state.saved_heads = machine_heads
+            st.query_params["heads"] = str(machine_heads)
+            st.rerun()
+
+    with cp2:
+        base_colors_count = st.number_input(
+            "Base Shades / Colors",
+            min_value=1,
+            max_value=30,
+            value=int(st.session_state.saved_shades),
+            step=1,
+            help="Base cloth colors per lot"
+        )
+        if base_colors_count != st.session_state.saved_shades:
+            st.session_state.saved_shades = base_colors_count
+            st.query_params["shades"] = str(base_colors_count)
+
+    pieces_per_lot = machine_heads * base_colors_count
+
+    with cp3:
+        col_q_mode, col_q_val = st.columns([1.0, 1.4])
+        with col_q_mode:
+            lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
+        with col_q_val:
+            if lots_mode == "Lots":
+                lots_count = st.number_input(
+                    "Kul Lots (LOTS)",
+                    min_value=0.5,
+                    max_value=50.0,
+                    value=float(st.session_state.saved_lots),
+                    step=0.5,
+                    help="Total Lots"
+                )
+                if lots_count != st.session_state.saved_lots:
+                    st.session_state.saved_lots = lots_count
+                    st.query_params["lots"] = f"{lots_count:g}"
+                num_pieces = int(round(pieces_per_lot * lots_count))
+            else:
+                num_pieces = st.number_input(
+                    "Kul Suits (SUITS)",
+                    min_value=1,
+                    max_value=100000,
+                    value=int(round(pieces_per_lot * st.session_state.saved_lots)),
+                    step=machine_heads
+                )
+                lots_count = round(num_pieces / pieces_per_lot, 2)
+
+    with cp4:
+        col_u_type, col_u_val = st.columns([1.0, 1.4])
+        with col_u_type:
+            cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
+        with col_u_val:
+            default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
+            cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
+
+    with cp5:
+        waste_pct = st.number_input(
+            "Dhaaga Wastage %",
+            min_value=0.0,
+            max_value=30.0,
+            value=float(st.session_state.saved_waste),
+            step=1.0,
+            format="%.1f",
+            help="Dhaaga wastage"
+        )
+        if waste_pct != st.session_state.saved_waste:
+            st.session_state.saved_waste = waste_pct
+            st.query_params["waste"] = f"{waste_pct:.1f}"
+
+    with cp6:
+        stitch_rate = st.number_input(
+            "Stitch Rate (per 1,000)",
+            min_value=0.05,
+            max_value=10.0,
+            value=float(st.session_state.saved_rate),
+            step=0.05,
+            format="%.2f",
+            help="Rate per 1,000 stitches in PKR"
+        )
+        if stitch_rate != st.session_state.saved_rate:
+            st.session_state.saved_rate = stitch_rate
+            st.query_params["rate"] = f"{stitch_rate:.2f}"
+
+    # Bobbin controls in detailed mode
+    col_b1, col_b2 = st.columns(2)
+    with col_b1:
+        bobbin_cone_capacity = st.number_input("Bobbin Thread Cone Size (Meters)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
+        st.session_state.bobbin_cone_cap = bobbin_cone_capacity
+    with col_b2:
+        bobbin_color = st.selectbox("Bobbin Thread Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
+        st.session_state.bobbin_color = bobbin_color
 
 # Quick Summary Pill Bar
 suits_per_color_calc = int(round(num_pieces / max(1, base_colors_count)))
@@ -1000,6 +1171,14 @@ if uploaded_files:
         if not st.session_state.get("suit_design_name"):
             raw_nm = fname.rsplit(".", 1)[0]
             st.session_state.suit_design_name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', raw_nm).strip() or raw_nm.strip()
+
+        # Feature 1: Auto-detect machine heads from file name if present
+        h_match = re.search(r'\b(20|24|28|30|32|36|40|44|48|56)\s*(?:head|heads|h)\b', fname, re.I)
+        if h_match and not st.session_state.get("_user_set_heads"):
+            auto_heads_val = int(h_match.group(1))
+            if auto_heads_val != st.session_state.saved_heads:
+                st.session_state.saved_heads = auto_heads_val
+                st.query_params["heads"] = str(auto_heads_val)
 
         if ext == "pdf":
             try:
@@ -1320,6 +1499,48 @@ def format_whatsapp_row(r) -> str:
         return f"• {name_str}: *{k_cones} Cones*"
 
 
+# Bobbin (Khicha / Nalki) Calculation (Feature 4)
+total_order_bobbin_m = float(total_suit_bobbin_m) * num_pieces * (1.0 + (waste_pct / 100.0))
+bobbin_cone_val = float(st.session_state.get("bobbin_cone_cap", 10000.0))
+b_clr_label = str(st.session_state.get("bobbin_color", "White (Sufaid)"))
+bobbin_cones = int(math.ceil(total_order_bobbin_m / bobbin_cone_val)) if total_order_bobbin_m > 0 and bobbin_cone_val > 0 else 0
+
+# KPI Metric Cards Grid (Key Numbers for Factory Floor)
+st.markdown(f"""
+<div class="kpi-grid">
+    <div class="kpi-card amber">
+        <div class="kpi-label">🧵 Kul Dhaaga Cones</div>
+        <div class="kpi-value">{total_order_cones} Cones</div>
+        <div class="kpi-subtext">Common: {total_common_cones} | Same: {total_same_cones}</div>
+    </div>
+    <div class="kpi-card green">
+        <div class="kpi-label">💵 1 Suit Rate (PKR)</div>
+        <div class="kpi-value">Rs {piece_rate:,.2f}</div>
+        <div class="kpi-subtext">Stitch Rate: Rs {stitch_rate:.2f} / 1k st</div>
+    </div>
+    <div class="kpi-card cyan">
+        <div class="kpi-label">📦 Poori Lot ka Bill</div>
+        <div class="kpi-value">Rs {total_order_amount:,.0f}</div>
+        <div class="kpi-subtext">{num_pieces} Suits ({lots_count:g} Lots)</div>
+    </div>
+    <div class="kpi-card purple">
+        <div class="kpi-label">⚡ 1 Suit Stitches</div>
+        <div class="kpi-value">{total_suit_stitches:,} st</div>
+        <div class="kpi-subtext">Total Repeats: {total_runs} R</div>
+    </div>
+    <div class="kpi-card coral">
+        <div class="kpi-label">🧵 Bobbin / Khicha</div>
+        <div class="kpi-value">{bobbin_cones} Cones</div>
+        <div class="kpi-subtext">{total_order_bobbin_m:,.0f}m ({b_clr_label})</div>
+    </div>
+    <div class="kpi-card pink">
+        <div class="kpi-label">⏱️ Machine Shifts</div>
+        <div class="kpi-value">~{shifts_needed} Shifts</div>
+        <div class="kpi-subtext">~{days_needed} Din @ 2 shifts/day</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TABS (DHAAGA LIST, 1 SUIT RATE BREAKDOWN, JOB SLIP)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1388,35 +1609,110 @@ with tab_req:
         if not safe_design_prefix:
             safe_design_prefix = "Design"
 
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            dhaaga_csv_filename = f"{safe_design_prefix}_Dhaaga_{num_pieces}_suits.csv"
-            st.download_button(
-                f"📥 Dhaaga List Download Karein ({safe_design_prefix}.csv)",
-                df_cones.to_csv(index=False).encode("utf-8-sig"),
-                dhaaga_csv_filename,
-                "text/csv",
-                use_container_width=True
-            )
-        with col_d2:
-            store_summary_text = f"🧵 *DHAAGA ORDER — {raw_design_name}*\n"
-            store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
-            store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
-            store_summary_text += "────────────────────────\n"
-            for _, r in df_cones.iterrows():
-                store_summary_text += f"{format_whatsapp_row(r)}\n"
-            store_summary_text += "────────────────────────\n"
-            store_summary_text += f"🧵 *Kul Cones:* {total_order_cones} Cones\n"
-            store_summary_text += f"🔄 *Repeat:* {total_runs} Repeat"
+        # WhatsApp summary text generation (including Bobbin)
+        store_summary_text = f"🧵 *DHAAGA ORDER — {raw_design_name}*\n"
+        store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
+        store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
+        store_summary_text += "────────────────────────\n"
+        for _, r in df_cones.iterrows():
+            store_summary_text += f"{format_whatsapp_row(r)}\n"
+        if bobbin_cones > 0:
+            store_summary_text += f"• *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones* ({total_order_bobbin_m:,.0f}m)\n"
+        store_summary_text += "────────────────────────\n"
+        store_summary_text += f"🧵 *Kul Dhaaga Cones:* {total_order_cones} Cones\n"
+        if bobbin_cones > 0:
+            store_summary_text += f"🧵 *Kul Bobbin Cones:* {bobbin_cones} Cones\n"
+        store_summary_text += f"🔄 *Repeat:* {total_runs} Repeat"
 
+        wa_encoded = urllib.parse.quote(store_summary_text)
+        wa_direct_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
+
+        # Prepare PDF data
+        pdf_parts_list = []
+        for h, p in st.session_state.parts.items():
+            st_raw = int(round(p.get('stitches', 0)))
+            p_det = part_runs.get(h, {})
+            pdf_parts_list.append({
+                "name": p.get("design_name", "Part"),
+                "setting": p_det.get("badge", ""),
+                "wilcom_st": st_raw,
+                "repeat": float(p.get("repeat", 1.0)),
+                "suit_st": p_det.get("suit_stitches", st_raw),
+                "rate": float(p_det.get("rate_per_piece", 0.0))
+            })
+
+        pdf_cones_list = []
+        for _, r in df_cones.iterrows():
+            pdf_cones_list.append({
+                "needle": r.get("Sooi #", r.get("Needle", "")),
+                "code": r.get("Code", ""),
+                "desc": r.get("Description", ""),
+                "type": "Matching (Same)" if r.get("Is_Same") else "Common",
+                "suit_m": r.get("1 Suit (m)", 0.0),
+                "cones": r.get("Kul Cones (🧵)", 0)
+            })
+
+        bobbin_dict = {
+            "color": b_clr_label,
+            "cones": bobbin_cones,
+            "meters": total_order_bobbin_m
+        }
+
+        job_card_pdf_bytes = generate_job_card_pdf(
+            design_name=raw_design_name,
+            num_pieces=num_pieces,
+            lots_count=lots_count,
+            machine_heads=machine_heads,
+            base_colors_count=base_colors_count,
+            suits_per_base_color=suits_per_base_color,
+            total_suit_stitches=total_suit_stitches,
+            stitch_rate=stitch_rate,
+            piece_rate=piece_rate,
+            total_order_amount=total_order_amount,
+            cone_capacity_val=cone_capacity_val,
+            cone_unit=cone_unit,
+            waste_pct=waste_pct,
+            shifts_needed=shifts_needed,
+            days_needed=days_needed,
+            total_runs=total_runs,
+            parts_data=pdf_parts_list,
+            cones_data=pdf_cones_list,
+            total_order_cones=total_order_cones,
+            bobbin_data=bobbin_dict
+        )
+
+        col_d1, col_d2, col_d3, col_d4 = st.columns([1.5, 1.3, 1.4, 1.0])
+        with col_d1:
+            st.markdown(f'<a href="{wa_direct_url}" target="_blank" class="wa-direct-btn">📲 Direct WhatsApp Bhejein</a>', unsafe_allow_html=True)
+        with col_d2:
             dhaaga_txt_filename = f"{safe_design_prefix}_WhatsApp_Dhaaga_{num_pieces}_suits.txt"
             st.download_button(
-                f"📋 WhatsApp Msg Copy Karein ({safe_design_prefix}.txt)",
+                f"📋 Msg Copy Karein ({safe_design_prefix}.txt)",
                 store_summary_text,
                 dhaaga_txt_filename,
                 "text/plain",
                 use_container_width=True
             )
+        with col_d3:
+            st.download_button(
+                f"🖨️ Job Card (PDF Print)",
+                job_card_pdf_bytes,
+                f"{safe_design_prefix}_Job_Card_{num_pieces}_suits.pdf",
+                "application/pdf",
+                use_container_width=True
+            )
+        with col_d4:
+            dhaaga_csv_filename = f"{safe_design_prefix}_Dhaaga_{num_pieces}_suits.csv"
+            st.download_button(
+                f"📥 Excel (CSV)",
+                df_cones.to_csv(index=False).encode("utf-8-sig"),
+                dhaaga_csv_filename,
+                "text/csv",
+                use_container_width=True
+            )
+
+        with st.expander("👁️ WhatsApp Message Preview (Single-Click Copy)", expanded=False):
+            st.code(store_summary_text, language="markdown")
     else:
         st.info("💡 Abhi koi dhaaga list mojood nahi hai.")
 
@@ -1556,39 +1852,45 @@ Master Signature: _______________   Store Issue: ___________
     if not safe_design_prefix:
         safe_design_prefix = "Design"
 
-    col_s1, col_s2 = st.columns(2)
+    whatsapp_msg = f"📋 *JOB SLIP — {raw_design_name}*\n"
+    whatsapp_msg += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
+    whatsapp_msg += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
+    whatsapp_msg += f"💰 Kul Bill: *Rs {total_order_amount:,.0f}*\n"
+    whatsapp_msg += f"⏱️ Shifts: ~{shifts_needed} Shifts ({days_needed} Din)\n\n"
+    whatsapp_msg += "*PARTS:*\n"
+    for h, p in st.session_state.parts.items():
+        p_det = part_runs.get(h, {})
+        b_txt = p_det.get("badge", "")
+        whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st -> Rs {p_det.get('rate_per_piece', 0.0):.2f}\n"
+    whatsapp_msg += "\n*DHAAGA:*\n"
+    if not df_cones.empty:
+        for _, r in df_cones.iterrows():
+            whatsapp_msg += f"{format_whatsapp_row(r)}\n"
+    if bobbin_cones > 0:
+        whatsapp_msg += f"• *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones*\n"
+    whatsapp_msg += f"────────────────────────\n"
+    whatsapp_msg += f"🧵 *Kul Cones:* {total_order_cones} Cones | 🔄 *Repeat:* {total_runs}"
+
+    wa_slip_encoded = urllib.parse.quote(whatsapp_msg)
+    wa_slip_url = f"https://api.whatsapp.com/send?text={wa_slip_encoded}"
+
+    col_s1, col_s2, col_s3 = st.columns([1.5, 1.4, 1.3])
     with col_s1:
-        job_slip_filename = f"{safe_design_prefix}_Job_Slip_{num_pieces}_suits.txt"
+        st.markdown(f'<a href="{wa_slip_url}" target="_blank" class="wa-direct-btn">📲 Direct WhatsApp Job Slip</a>', unsafe_allow_html=True)
+    with col_s2:
         st.download_button(
-            f"📥 Job Slip Download Karein ({safe_design_prefix}.txt)",
-            master_slip_text,
-            job_slip_filename,
-            "text/plain",
+            f"🖨️ Job Card (PDF Print)",
+            job_card_pdf_bytes,
+            f"{safe_design_prefix}_Job_Card_{num_pieces}_suits.pdf",
+            "application/pdf",
             use_container_width=True
         )
-    with col_s2:
-        whatsapp_msg = f"📋 *JOB SLIP — {raw_design_name}*\n"
-        whatsapp_msg += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
-        whatsapp_msg += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
-        whatsapp_msg += f"💰 Kul Bill: *Rs {total_order_amount:,.0f}*\n"
-        whatsapp_msg += f"⏱️ Shifts: ~{shifts_needed} Shifts ({days_needed} Din)\n\n"
-        whatsapp_msg += "*PARTS:*\n"
-        for h, p in st.session_state.parts.items():
-            p_det = part_runs.get(h, {})
-            b_txt = p_det.get("badge", "")
-            whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st -> Rs {p_det.get('rate_per_piece', 0.0):.2f}\n"
-        whatsapp_msg += "\n*DHAAGA:*\n"
-        if not df_cones.empty:
-            for _, r in df_cones.iterrows():
-                whatsapp_msg += f"{format_whatsapp_row(r)}\n"
-        whatsapp_msg += f"────────────────────────\n"
-        whatsapp_msg += f"🧵 *Kul Cones:* {total_order_cones} Cones | 🔄 *Repeat:* {total_runs}"
-
-        wa_slip_filename = f"{safe_design_prefix}_WhatsApp_Slip_{num_pieces}_suits.txt"
+    with col_s3:
+        job_slip_filename = f"{safe_design_prefix}_Job_Slip_{num_pieces}_suits.txt"
         st.download_button(
-            f"📲 WhatsApp Format Copy Karein ({safe_design_prefix}.txt)",
-            whatsapp_msg,
-            wa_slip_filename,
+            f"📥 Master Slip (.txt)",
+            master_slip_text,
+            job_slip_filename,
             "text/plain",
             use_container_width=True
         )
