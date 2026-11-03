@@ -514,7 +514,7 @@ def calculate_full_production(
 
     # 4. Real Factory Timing (Factoring Color Changes & Takaai/Frame Changes)
     num_color_changes = max(1, len(needle_bar_map))
-    real_spm = DEFAULT_REAL_RPM
+    real_spm = float(machine_rpm) if (machine_rpm is not None and float(machine_rpm) > 0) else float(DEFAULT_REAL_RPM)
     stitching_mins_total = (total_suit_stitches / real_spm) * total_runs if real_spm > 0 else 0
     color_change_loss_mins = (num_color_changes * DEFAULT_COLOR_CHANGE_SECONDS / 60.0) * total_runs
     frame_change_loss_mins = DEFAULT_FRAME_CHANGE_MINUTES * total_runs
@@ -566,6 +566,7 @@ def calculate_full_production(
         # Needle Map
         "needle_bar_map": needle_bar_map,
         # Real Machine Floor Timing
+        "real_spm": int(round(real_spm)),
         "real_total_hours": real_total_hours,
         "real_shifts": real_shifts,
         "real_days": real_days,

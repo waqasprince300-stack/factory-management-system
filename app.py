@@ -111,6 +111,9 @@ if "saved_waste" not in st.session_state:
 if "saved_rate" not in st.session_state:
     st.session_state.saved_rate = _safe_float_param("rate", DEFAULT_STITCH_RATE, 0.05, 10.0)
 
+if "saved_speed" not in st.session_state:
+    st.session_state.saved_speed = _safe_int_param("speed", DEFAULT_REAL_RPM, 200, 1500)
+
 if "suit_design_name" not in st.session_state:
     st.session_state.suit_design_name = ""
 
@@ -233,10 +236,16 @@ st.markdown(f"""
 
 {theme_css_vars}
 
+*, *::before, *::after {{
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeLegibility !important;
+}}
+
 html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {{
     background-color: var(--bg-main) !important;
     color: var(--text-primary) !important;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     letter-spacing: -0.01em;
 }}
 
@@ -530,15 +539,13 @@ div[data-testid="stNumberInput"] button:hover svg {{
 }}
 
 /* Modern Streamlit 1.64 React-Aria & BaseWeb Selectbox */
-.stApp div[data-testid="stSelectbox"] > div:has(input),
-.stApp div[data-testid="stSelectbox"] div[role="group"],
-.stApp div[data-testid="stSelectbox"] .react-aria-Group,
 .stApp div[data-testid="stSelectbox"] [class*="e1fp86qc0"],
-.stApp div[data-testid="stSelectbox"] > div:last-child,
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"],
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div,
-.stApp [data-baseweb="select"],
-.stApp [data-baseweb="select"] > div {{
+.stApp div[data-testid="stSelectbox"] .react-aria-Group,
+.stApp div[data-testid="stSelectbox"] div[data-hovered],
+.stApp div[data-testid="stSelectbox"] div:not([data-hovered]),
+.stApp div[data-testid="stSelectbox"] [data-baseweb="select"],
+.stApp div[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+.stApp div[data-testid="stSelectbox"] > div:last-child {{
     background-color: var(--input-bg) !important;
     border: 1px solid var(--input-border) !important;
     border-radius: 7px !important;
@@ -547,25 +554,25 @@ div[data-testid="stNumberInput"] button:hover svg {{
     min-height: 38px !important;
 }}
 
-.stApp div[data-testid="stSelectbox"] div[role="group"]:hover,
-.stApp div[data-testid="stSelectbox"] div[role="group"][data-hovered],
+.stApp div[data-testid="stSelectbox"] [class*="e1fp86qc0"]:hover,
 .stApp div[data-testid="stSelectbox"] .react-aria-Group:hover,
-.stApp div[data-testid="stSelectbox"] [data-baseweb="select"] > div:hover,
-.stApp [data-baseweb="select"] > div:hover {{
+.stApp div[data-testid="stSelectbox"] [data-baseweb="select"]:hover,
+.stApp div[data-testid="stSelectbox"] [data-baseweb="select"] > div:hover {{
     border-color: var(--border-focus) !important;
     background-color: var(--input-bg) !important;
 }}
 
-.stApp div[data-testid="stSelectbox"] div[role="group"]:focus-within,
-.stApp div[data-testid="stSelectbox"] div[role="group"][data-focus-within],
+.stApp div[data-testid="stSelectbox"] [class*="e1fp86qc0"][data-focus-within],
 .stApp div[data-testid="stSelectbox"] .react-aria-Group:focus-within {{
     border-color: var(--border-focus) !important;
+    background-color: var(--input-bg) !important;
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
 }}
 
 /* Text input inside the selectbox */
 .stApp [data-testid="stSelectbox"] input,
 .stApp [data-testid="stSelectbox"] input[type="text"],
+.stApp [data-testid="stSelectbox"] [class*="e1fp86qc1"],
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] p,
@@ -583,6 +590,8 @@ div[data-testid="stNumberInput"] button:hover svg {{
 /* Arrow button and icons */
 .stApp [data-testid="stSelectbox"] button,
 .stApp [data-testid="stSelectbox"] svg,
+.stApp [data-testid="stSelectbox"] [class*="e1fp86qc2"],
+.stApp [data-testid="stSelectbox"] [class*="e1fp86qc2"] svg,
 .stApp [data-baseweb="select"] svg {{
     fill: var(--text-primary) !important;
     color: var(--text-primary) !important;
@@ -595,7 +604,9 @@ div[data-testid="stSelectboxVirtualDropdown"] > div,
 div[data-baseweb="popover"],
 div[data-baseweb="popover"] > div,
 ul[role="listbox"],
-div[role="listbox"] {{
+div[role="listbox"],
+[class*="e1fp86qc4"],
+[class*="e1fp86qc5"] {{
     background-color: var(--bg-surface-elevated) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 8px !important;
@@ -605,7 +616,8 @@ div[role="listbox"] {{
 
 /* Option Items in Dropdown */
 div[role="option"],
-li[role="option"] {{
+li[role="option"],
+[class*="e1fp86qc7"] {{
     background-color: transparent !important;
     color: var(--text-primary) !important;
     font-size: 0.85rem !important;
@@ -617,14 +629,18 @@ div[role="option"]:hover,
 div[role="option"][data-hovered],
 div[role="option"][aria-selected="true"],
 li[role="option"]:hover,
-li[role="option"][aria-selected="true"] {{
+li[role="option"][aria-selected="true"],
+[class*="e1fp86qc7"]:hover,
+[class*="e1fp86qc7"][data-hovered] {{
     background-color: var(--table-row-hover) !important;
     color: var(--accent-amber) !important;
 }}
 
 /* Modern Expander (Details & Summary) Styling */
 .stApp [data-testid="stExpander"],
-.stApp .stExpander {{
+.stApp .stExpander,
+.stApp details,
+.stApp [class*="e1a0jn2t"] {{
     background-color: var(--bg-surface) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 10px !important;
@@ -633,39 +649,43 @@ li[role="option"][aria-selected="true"] {{
     overflow: hidden !important;
 }}
 
-.stApp [data-testid="stExpander"] details {{
+.stApp [data-testid="stExpander"] details,
+.stApp details[class*="e1a0jn2t2"] {{
     border: none !important;
-    border-radius: 10px !important;
     background-color: transparent !important;
 }}
 
-.stApp [data-testid="stExpander"] summary {{
+.stApp [data-testid="stExpander"] summary,
+.stApp summary[class*="e1a0jn2t10"],
+.stApp [data-testid="stExpander"] summary[aria-expanded] {{
     background-color: var(--bg-surface-elevated) !important;
     border: none !important;
-    border-radius: 9px !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
     padding: 10px 14px !important;
     color: var(--text-primary) !important;
-    font-size: 0.86rem !important;
-    font-weight: 800 !important;
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
     cursor: pointer !important;
     transition: all 0.15s ease !important;
     display: flex !important;
     align-items: center !important;
+    gap: 8px !important;
 }}
 
 .stApp [data-testid="stExpander"] summary:hover,
-.stApp [data-testid="stExpander"] summary:focus {{
+.stApp summary[class*="e1a0jn2t10"]:hover {{
     background-color: var(--btn-hover-bg) !important;
-    border-color: var(--border-focus) !important;
 }}
 
 .stApp [data-testid="stExpander"] summary *,
 .stApp [data-testid="stExpander"] summary p,
 .stApp [data-testid="stExpander"] summary span,
-.stApp [data-testid="stExpander"] summary div {{
+.stApp [data-testid="stExpander"] summary div,
+.stApp summary[class*="e1a0jn2t10"] *,
+.stApp [class*="e1a0jn2t4"] * {{
     color: var(--text-primary) !important;
-    font-size: 0.86rem !important;
-    font-weight: 800 !important;
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
 }}
 
 .stApp [data-testid="stExpander"] summary:hover *,
@@ -674,7 +694,8 @@ li[role="option"][aria-selected="true"] {{
     color: var(--accent-amber) !important;
 }}
 
-.stApp [data-testid="stExpander"] summary svg {{
+.stApp [data-testid="stExpander"] summary svg,
+.stApp summary[class*="e1a0jn2t10"] svg {{
     fill: var(--text-primary) !important;
     color: var(--text-primary) !important;
 }}
@@ -684,28 +705,37 @@ li[role="option"][aria-selected="true"] {{
     color: var(--accent-amber) !important;
 }}
 
-.stApp [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+.stApp [data-testid="stExpander"] [data-testid="stExpanderDetails"],
+.stApp div[class*="e1a0jn2t11"] {{
     background-color: var(--bg-surface) !important;
-    border-top: 1px solid var(--border-main) !important;
-    padding: 12px 14px !important;
+    padding: 14px 16px !important;
     color: var(--text-primary) !important;
 }}
 
-/* High-Contrast Widget Labels */
-.stApp [data-testid="stWidgetLabel"],
-.stApp [data-testid="stWidgetLabel"] *,
-.stApp [data-testid="stWidgetLabel"] label,
-.stApp [data-testid="stWidgetLabel"] p,
-.stApp [data-testid="stWidgetLabel"] span,
-.stApp [data-testid="stWidgetLabel"] div {{
-    color: var(--label-color) !important;
-    font-weight: 800 !important;
-    font-size: 0.77rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
+/* High-Contrast Crisp Widget Labels */
+.stApp [data-testid="stWidgetLabel"] {{
+    margin-bottom: 4px !important;
 }}
-.stApp [data-testid="stWidgetLabel"] svg {{
+.stApp [data-testid="stWidgetLabel"] label,
+.stApp [data-testid="stWidgetLabel"] label p,
+.stApp [data-testid="stWidgetLabel"] label span {{
+    color: var(--label-color) !important;
+    font-weight: 700 !important;
+    font-size: 0.81rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.025em !important;
+    line-height: 1.3 !important;
+}}
+.stApp [data-testid="stWidgetLabel"] svg,
+.stApp [data-testid="stTooltipIcon"] svg {{
     fill: var(--text-muted) !important;
+    color: var(--text-muted) !important;
+}}
+.stApp [data-testid="stTooltipIcon"] {{
+    margin-left: 5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    vertical-align: middle !important;
 }}
 
 /* Standard Button System */
@@ -795,8 +825,9 @@ div[data-testid="stDownloadButton"] > button:hover {{
     margin-top: 8px !important;
 }}
 
+.stApp .stFileChip,
 .stApp [data-testid="stFileChip"],
-.stApp div[data-testid="stFileChip"],
+.stApp div[class*="e1dmul8p3"],
 .stApp [data-testid="stFileUploaderFile"],
 .stApp div[data-testid="stFileUploaderFile"] {{
     background-color: var(--bg-surface-elevated) !important;
@@ -807,19 +838,20 @@ div[data-testid="stDownloadButton"] > button:hover {{
     display: inline-flex !important;
     align-items: center !important;
     gap: 6px !important;
+    color: var(--text-primary) !important;
 }}
 
+.stApp .stFileChip:hover,
 .stApp [data-testid="stFileChip"]:hover,
-.stApp div[data-testid="stFileChip"]:hover,
+.stApp div[class*="e1dmul8p3"]:hover,
 .stApp div[data-testid="stFileUploaderFile"]:hover {{
     border-color: var(--border-focus) !important;
 }}
 
-.stApp [data-testid="stFileChipName"],
+.stApp .stFileChip *,
 .stApp [data-testid="stFileChip"] *,
-.stApp [data-testid="stFileChip"] span,
-.stApp [data-testid="stFileChip"] p,
-.stApp [data-testid="stFileChip"] div,
+.stApp div[class*="e1dmul8p3"] *,
+.stApp [data-testid="stFileChipName"],
 .stApp [data-testid="stFileUploaderFileName"],
 .stApp [data-testid="stFileUploaderFile"] * {{
     color: var(--text-primary) !important;
@@ -827,7 +859,9 @@ div[data-testid="stDownloadButton"] > button:hover {{
     font-size: 0.82rem !important;
 }}
 
+.stApp .stFileChip svg,
 .stApp [data-testid="stFileChip"] svg,
+.stApp div[class*="e1dmul8p3"] svg,
 .stApp div[data-testid="stFileUploaderFile"] svg {{
     fill: var(--text-primary) !important;
     color: var(--text-primary) !important;
@@ -863,6 +897,10 @@ div[data-testid="stDownloadButton"] > button:hover {{
 .stApp [data-testid="stRadio"] span,
 .stApp [data-testid="stRadio"] p,
 .stApp [data-testid="stRadio"] div,
+.stApp [data-testid="stRadio"] [class*="e1mpz0hj"],
+.stApp [data-testid="stRadio"] [class*="e1mpz0hj"] *,
+.stApp [data-testid="stRadio"] [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stRadio"] [data-testid="stMarkdownContainer"] span,
 .stApp [data-testid="stCheckbox"] label,
 .stApp [data-testid="stCheckbox"] label * {{
     color: var(--text-primary) !important;
@@ -872,7 +910,6 @@ div[data-testid="stDownloadButton"] > button:hover {{
 
 /* Tab Styling (Streamlit 1.64+ Modern React-Aria Tabs Support) */
 .stApp [data-testid="stTabs"] [role="tablist"],
-.stApp [data-testid="stTabs"] > div:first-child,
 .stApp .stTabs [role="tablist"] {{
     gap: 8px !important;
     background: var(--bg-surface) !important;
@@ -888,8 +925,9 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 
 /* All Inactive Tabs Base */
+.stApp [data-testid="stTabs"] [role="tab"],
 .stApp [data-testid="stTabs"] button[role="tab"],
-.stApp [data-testid="stTabs"] button,
+.stApp [data-testid="stTabs"] div[role="tab"],
 .stApp [data-testid="stTabs"] [data-testid="stTab"],
 .stApp [data-testid="stTab"],
 .stApp [data-baseweb="tab"] {{
@@ -903,23 +941,20 @@ div[data-testid="stDownloadButton"] > button:hover {{
     transition: all 0.2s ease !important;
     cursor: pointer !important;
     flex-shrink: 0 !important;
+    color: var(--text-primary) !important;
+    font-weight: 700 !important;
+    font-size: 0.88rem !important;
+    opacity: 1 !important;
 }}
 
 /* Unselected Inactive Tab Text (Force high-contrast text in Light & Dark Mode) */
-.stApp [data-testid="stTabs"] button[role="tab"] *,
-.stApp [data-testid="stTabs"] button[role="tab"] p,
-.stApp [data-testid="stTabs"] button[role="tab"] span,
-.stApp [data-testid="stTabs"] button[role="tab"] div,
-.stApp [data-testid="stTabs"] button *,
-.stApp [data-testid="stTabs"] button p,
-.stApp [data-testid="stTabs"] button span,
-.stApp [data-testid="stTabs"] button div,
+.stApp [data-testid="stTabs"] [role="tab"] *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"] *,
-.stApp [data-testid="stTabs"] [data-testid="stTab"] p,
 .stApp [data-testid="stTab"] *,
 .stApp [data-testid="stTab"] p,
-.stApp [data-baseweb="tab"] *,
-.stApp [data-baseweb="tab"] p {{
+.stApp [data-testid="stTab"] span,
+.stApp [data-testid="stTab"] div,
+.stApp [data-testid="stTab"] [data-testid="stMarkdownContainer"] p {{
     color: var(--text-primary) !important;
     font-weight: 700 !important;
     font-size: 0.88rem !important;
@@ -928,45 +963,35 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 
 /* Inactive Tab Hover */
-.stApp [data-testid="stTabs"] button[role="tab"]:hover,
-.stApp [data-testid="stTabs"] button:hover,
+.stApp [data-testid="stTabs"] [role="tab"]:hover,
 .stApp [data-testid="stTabs"] [data-testid="stTab"]:hover,
-.stApp [data-testid="stTab"]:hover,
-.stApp [data-baseweb="tab"]:hover {{
+.stApp [data-testid="stTab"]:hover {{
     background-color: var(--btn-hover-bg) !important;
     border-color: var(--border-focus) !important;
 }}
-.stApp [data-testid="stTabs"] button[role="tab"]:hover *,
-.stApp [data-testid="stTabs"] button:hover *,
+.stApp [data-testid="stTabs"] [role="tab"]:hover *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"]:hover *,
-.stApp [data-testid="stTab"]:hover *,
-.stApp [data-baseweb="tab"]:hover * {{
-    color: var(--text-primary) !important;
+.stApp [data-testid="stTab"]:hover * {{
+    color: var(--accent-amber) !important;
 }}
 
 /* Active Selected Tab */
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
-.stApp [data-testid="stTabs"] button[aria-selected="true"],
+.stApp [data-testid="stTabs"] [role="tab"][aria-selected="true"],
 .stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"],
 .stApp [data-testid="stTab"][aria-selected="true"],
-.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
-.stApp button[data-baseweb="tab"][aria-selected="true"] {{
+.stApp [data-testid="stTabs"] [role="tab"][data-selected],
+.stApp [data-testid="stTabs"] [data-testid="stTab"][data-selected],
+.stApp [data-testid="stTab"][data-selected] {{
     background: var(--tab-active-bg) !important;
     border: 2px solid var(--accent-amber) !important;
     box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
 }}
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] span,
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] div,
-.stApp [data-testid="stTabs"] button[aria-selected="true"] *,
-.stApp [data-testid="stTabs"] button[aria-selected="true"] p,
+.stApp [data-testid="stTabs"] [role="tab"][aria-selected="true"] *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] *,
-.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] p,
 .stApp [data-testid="stTab"][aria-selected="true"] *,
-.stApp [data-testid="stTab"][aria-selected="true"] p,
-.stApp [data-baseweb="tab"][aria-selected="true"] *,
-.stApp [data-baseweb="tab"][aria-selected="true"] p {{
+.stApp [data-testid="stTabs"] [role="tab"][data-selected] *,
+.stApp [data-testid="stTabs"] [data-testid="stTab"][data-selected] *,
+.stApp [data-testid="stTab"][data-selected] * {{
     color: var(--accent-amber) !important;
     font-weight: 800 !important;
 }}
@@ -985,32 +1010,6 @@ div[data-testid="stDownloadButton"] > button:hover {{
     width: 0 !important;
     background-color: transparent !important;
     border: none !important;
-}}
-
-/* Direct WhatsApp Link Button */
-.wa-direct-btn {{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #25d366, #128c7e) !important;
-    color: #ffffff !important;
-    font-weight: 800 !important;
-    font-size: 0.88rem !important;
-    padding: 10px 16px !important;
-    border-radius: 8px !important;
-    text-decoration: none !important;
-    box-shadow: 0 3px 12px rgba(37, 211, 102, 0.3) !important;
-    transition: all 0.2s ease !important;
-    width: 100%;
-    text-align: center;
-    box-sizing: border-box;
-}}
-.wa-direct-btn:hover {{
-    background: linear-gradient(135deg, #2ee071, #0f796c) !important;
-    box-shadow: 0 6px 18px rgba(37, 211, 102, 0.45) !important;
-    transform: translateY(-1px);
-    color: #ffffff !important;
 }}
 
 /* Quick Mode Pill */
@@ -1083,8 +1082,8 @@ with c_up_reset:
 
 # Quick Mobile Helper Guide
 st.markdown("""
-<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-left:3.5px solid var(--accent-amber); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.77rem; color:var(--text-secondary); line-height:1.45;">
-    💡 <strong>WhatsApp Mobile Tip:</strong> WhatsApp par PDF tap kar k download karein ➔ Phir yahan <strong>'Browse files'</strong> dabayein aur Android k <strong>'Recent'</strong> tab se 1-tap mein select karein.
+<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-left:3.5px solid var(--accent-amber); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.78rem; color:var(--text-secondary); line-height:1.45;">
+    📄 <strong>Upload Tip:</strong> Wilcom Production Sheet (PDF) ya mobile photo/scan yahan <strong>Browse files</strong> ya drag-and-drop karke select karein. Dhaaga aur Costing calculation foran load ho jaye gi.
 </div>
 """, unsafe_allow_html=True)
 
@@ -1092,7 +1091,7 @@ st.markdown("""
 # 2. MACHINE & ORDER SETTINGS (COMPACT 4 CONTROLS + ADVANCE DRAWER)
 # ═══════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="panel-title" style="margin-bottom:6px;">⚙️ Order & Machine Settings</div>', unsafe_allow_html=True)
-sp1, sp2, sp3, sp4 = st.columns([1.3, 1.3, 2.4, 1.6])
+sp1, sp2, sp3, sp4 = st.columns([1.5, 1.5, 2.3, 1.7], gap="medium")
 
 with sp1:
     machine_heads = st.number_input(
@@ -1165,9 +1164,9 @@ with sp4:
         st.session_state.saved_rate = stitch_rate
         st.query_params["rate"] = f"{stitch_rate:.2f}"
 
-# Collapsed Quick Mode Advance Options (Cone Size, Wastage, Bobbin)
-with st.expander("⚙️ Advance Settings (Cone Size, Wastage %, Bobbin Khicha)", expanded=False):
-    ap1, ap2, ap3, ap4, ap5 = st.columns([1.5, 2.0, 1.8, 2.3, 2.4])
+# Collapsed Quick Mode Advance Options (Cone Size, Wastage, Speed, Bobbin)
+with st.expander("⚙️ Advance Settings (Cone Size, Wastage %, Speed SPM, Bobbin Khicha)", expanded=False):
+    ap1, ap2, ap3, ap4, ap5, ap6 = st.columns([1.4, 1.8, 1.5, 1.7, 2.0, 2.2], gap="medium")
     with ap1:
         cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
     with ap2:
@@ -1179,9 +1178,14 @@ with st.expander("⚙️ Advance Settings (Cone Size, Wastage %, Bobbin Khicha)"
             st.session_state.saved_waste = waste_pct
             st.query_params["waste"] = f"{waste_pct:.1f}"
     with ap4:
+        machine_spm = st.number_input("Speed (SPM)", min_value=200, max_value=1500, value=int(st.session_state.saved_speed), step=20, help="Floor Running Speed (Stitches Per Minute) - Default: 680 SPM")
+        if machine_spm != st.session_state.saved_speed:
+            st.session_state.saved_speed = machine_spm
+            st.query_params["speed"] = str(machine_spm)
+    with ap5:
         bobbin_cone_capacity = st.number_input("Bobbin Cone (m)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
         st.session_state.bobbin_cone_cap = bobbin_cone_capacity
-    with ap5:
+    with ap6:
         bobbin_color = st.selectbox("Bobbin Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
         st.session_state.bobbin_color = bobbin_color
 
@@ -1469,7 +1473,7 @@ results = calculate_full_production(
     waste_pct=waste_pct,
     stitch_rate=stitch_rate,
     cone_price=DEFAULT_CONE_PRICE,
-    machine_rpm=DEFAULT_MACHINE_RPM,
+    machine_rpm=machine_spm,
     shift_hours=DEFAULT_SHIFT_HOURS,
     parts=st.session_state.parts
 )
@@ -1595,9 +1599,9 @@ st.markdown(f"""
         <div class="kpi-subtext">~{bobbin_kg:.2f} kg ({bobbin_grams:,.0f}g) • {b_clr_label}</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-label">⏱️ Factory Shifts</div>
+                <div class="kpi-label">⏱️ Factory Shifts</div>
         <div class="kpi-value">~{real_shifts} Shifts</div>
-        <div class="kpi-subtext">~{real_days} Din ({real_total_hours}h @ 680 SPM)</div>
+        <div class="kpi-subtext">~{real_days} Din ({real_total_hours}h @ {machine_spm} SPM)</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1741,7 +1745,7 @@ with tab_store:
         # WhatsApp summary text generation (including Bobbin & Bukram)
         store_summary_text = f"🧵 *DHAAGA & STORE ORDER — {raw_design_name}*\n"
         store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
-        store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
+        store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}*\n"
         store_summary_text += "────────────────────────\n"
         for _, r in df_cones.iterrows():
             store_summary_text += f"{format_whatsapp_row(r)}\n"
@@ -1751,7 +1755,7 @@ with tab_store:
             store_summary_text += f"🧵 *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones* (~{bobbin_kg:.2f} kg / {total_order_bobbin_m:,.0f}m)\n"
         if bukram_rolls_int > 0:
             store_summary_text += f"📜 *Bukram/Paper*: *{bukram_rolls_int} Rolls* (~{total_bukram_m:,.0f}m / Frame: {frame_length_m:.1f}m)\n"
-        store_summary_text += f"🔄 *Machine Repeats:* {total_runs} R | ⏱️ *Takhmeena Time:* ~{real_shifts} Shifts (~{real_days} Din)"
+        store_summary_text += f"🔄 *Machine Repeats:* {total_runs} R | ⏱️ *Takhmeena Time:* ~{real_shifts} Shifts (~{real_days} Din @ {machine_spm} SPM)"
 
         wa_encoded = urllib.parse.quote(store_summary_text)
         wa_direct_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
@@ -1860,8 +1864,8 @@ with tab_floor:
     needle_table_html += "</tbody></table></div>"
     st.markdown(needle_table_html, unsafe_allow_html=True)
 
-    # 2. Real Floor Timing & Downtime
-    pure_stitch_hours = ((total_suit_stitches / DEFAULT_REAL_RPM) * total_runs / 60.0) if DEFAULT_REAL_RPM > 0 else 0
+        # 2. Real Floor Timing & Downtime
+    pure_stitch_hours = ((total_suit_stitches / machine_spm) * total_runs / 60.0) if machine_spm > 0 else 0
     col_rt1, col_rt2 = st.columns([1.1, 0.9])
     with col_rt1:
         st.markdown(f"""<div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:9px; padding:14px; box-shadow:var(--card-shadow); margin-bottom:12px;">
@@ -1869,8 +1873,8 @@ with tab_floor:
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
     <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:7px; padding:8px 10px;">
         <div style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Running Speed</div>
-        <div style="font-family:'JetBrains Mono',monospace; font-size:1.1rem; font-weight:800; color:var(--text-primary);">{DEFAULT_REAL_RPM} SPM</div>
-        <div style="font-size:0.7rem; color:var(--text-secondary);">Real Average Floor Speed</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:1.1rem; font-weight:800; color:var(--text-primary);">{machine_spm} SPM</div>
+        <div style="font-size:0.7rem; color:var(--text-secondary);">Real Average Floor Speed (Adjustable)</div>
     </div>
     <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:7px; padding:8px 10px;">
         <div style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Pure Stitching</div>
@@ -1889,7 +1893,7 @@ with tab_floor:
     </div>
 </div>
 <div style="background:var(--bg-surface-elevated); border-left:3px solid var(--accent-amber); border-radius:6px; padding:8px 12px; font-size:0.8rem; color:var(--text-secondary);">
-    💡 <strong>Factory Standard:</strong> Theoretical machine speed (850 RPM) kabhi achieve nahi hoti; 680 SPM average speed, color change stops aur frame badalne ka waqt milakar asal shift time banta hai.
+    💡 <strong>Factory Standard:</strong> Theoretical machine speed (850 RPM) kabhi achieve nahi hoti; {machine_spm} SPM average speed, color change stops aur frame badalne ka waqt milakar asal shift time banta hai. Speed tabdeel karne ke liye upar <strong>Advance Settings</strong> kholein.
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -2076,14 +2080,14 @@ Master Signature: _______________   Store Issue: ___________
 
     whatsapp_msg = f"📋 *JOB SLIP — {raw_design_name}*\n"
     whatsapp_msg += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
-    whatsapp_msg += f"⚡ Stitches: *{total_suit_stitches:,}* | Rate: *Rs {piece_rate:,.2f}*\n"
-    whatsapp_msg += f"💰 Kul Bill: *Rs {total_order_amount:,.0f}*\n"
-    whatsapp_msg += f"⏱️ Shifts: ~{real_shifts} Shifts ({real_days} Din @ 680 SPM)\n\n"
+    whatsapp_msg += f"⚡ Stitches: *{total_suit_stitches:,}*\n"
+    
+    whatsapp_msg += f"⏱️ Shifts: ~{real_shifts} Shifts ({real_days} Din @ {machine_spm} SPM)\n\n"
     whatsapp_msg += "*PARTS:*\n"
     for h, p in st.session_state.parts.items():
         p_det = part_runs.get(h, {})
         b_txt = p_det.get("badge", "")
-        whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st -> Rs {p_det.get('rate_per_piece', 0.0):.2f}\n"
+        whatsapp_msg += f"• *{p['design_name']}* [{b_txt}]: {p_det.get('suit_stitches', 0):,} st\n"
     whatsapp_msg += "\n*DHAAGA & STORE:*\n"
     if not df_cones.empty:
         for _, r in df_cones.iterrows():

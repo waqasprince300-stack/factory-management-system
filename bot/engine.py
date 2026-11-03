@@ -235,14 +235,12 @@ def process_whatsapp_pdf(pdf_bytes: bytes, filename: str, overrides: dict = None
         bukram_data=bukram_dict
     )
 
-    # 8. Build WhatsApp Formatted Message
+    # 8. Build WhatsApp Formatted Message (Dhaaga & Store details only, no financial rate/profit)
     msg = f"🧵 *THREADWORKS • EMBROIDERY BOT*\n"
     msg += f"📋 *Design:* {clean_dn}\n"
     msg += f"📦 *Order:* *{num_pieces} Suits* ({lots_val:g} Lot) | *{heads_val} Heads* | *{base_shades_val} Shades*\n"
     msg += f"─────────────────────────\n"
     msg += f"⚡ *Kul Stitches:* *{total_suit_stitches:,} st*\n"
-    msg += f"💵 *1 Suit Rate:* *Rs {piece_rate:,.2f}* (@ Rs {rate_val:.2f}/1k)\n"
-    msg += f"💰 *Poori Lot Bill:* *Rs {total_order_amount:,.0f}*\n"
     msg += f"─────────────────────────\n"
     msg += f"🧵 *STORE REQUISITION (DHAAGA & MATERIAL):*\n"
     if not df_cones.empty:
@@ -254,8 +252,7 @@ def process_whatsapp_pdf(pdf_bytes: bytes, filename: str, overrides: dict = None
         msg += f"• *Bukram/Paper:* *{bukram_rolls_int} Rolls* (~{total_bukram_m:,.0f}m / Frame: {frame_length_m:.1f}m)\n"
     msg += f"🔄 *Machine Repeats:* *{total_runs} Repeat*\n"
     msg += f"─────────────────────────\n"
-    msg += f"⏱️ *FLOOR TIMING:* ~*{real_shifts} Shifts* (~{real_days} Din @ 680 SPM)\n"
-    msg += f"🌟 *SAAF MUNAFA (PROFIT):* *Rs {net_profit_per_suit:,.2f}* / Suit (Lot: *Rs {total_order_profit:,.0f}*)\n"
+    msg += f"⏱️ *FLOOR TIMING:* ~*{real_shifts} Shifts* (~{real_days} Din)\n"
     msg += f"─────────────────────────\n"
     msg += f"🖨️ *Printable A4 Job Card PDF neechay attach hai.*"
 
