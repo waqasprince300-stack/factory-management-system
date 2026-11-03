@@ -759,7 +759,7 @@ div[data-testid="stDownloadButton"] > button:hover {{
     color: var(--del-btn-hover-text) !important;
 }}
 
-/* File Uploader */
+/* File Uploader Dropzone (Light & Dark Mode) */
 .stApp div[data-testid="stFileUploader"] {{
     background: transparent !important;
 }}
@@ -767,37 +767,107 @@ div[data-testid="stDownloadButton"] > button:hover {{
     background-color: var(--bg-surface) !important;
     border: 1px dashed var(--border-main) !important;
     border-radius: 8px !important;
-    padding: 10px 14px !important;
+    padding: 8px 12px !important;
 }}
 .stApp div[data-testid="stFileUploader"] section:hover {{
     border-color: var(--border-focus) !important;
 }}
-.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {{
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"],
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] *,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] span,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] small,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] *,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] span,
+.stApp div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] small {{
     color: var(--text-secondary) !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
 }}
+
+/* Uploaded Files Chips & Items (Streamlit 1.64+) */
+.stApp [data-testid="stFileChips"],
+.stApp div[data-testid="stFileChips"] {{
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+}}
+
+.stApp [data-testid="stFileChip"],
+.stApp div[data-testid="stFileChip"],
+.stApp [data-testid="stFileUploaderFile"],
 .stApp div[data-testid="stFileUploaderFile"] {{
     background-color: var(--bg-surface-elevated) !important;
     border: 1px solid var(--border-main) !important;
-    border-radius: 6px !important;
-    padding: 4px 8px !important;
+    border-radius: 8px !important;
+    padding: 6px 12px !important;
+    box-shadow: var(--card-shadow) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
 }}
-.stApp div[data-testid="stFileUploaderFileName"] {{
+
+.stApp [data-testid="stFileChip"]:hover,
+.stApp div[data-testid="stFileChip"]:hover,
+.stApp div[data-testid="stFileUploaderFile"]:hover {{
+    border-color: var(--border-focus) !important;
+}}
+
+.stApp [data-testid="stFileChipName"],
+.stApp [data-testid="stFileChip"] *,
+.stApp [data-testid="stFileChip"] span,
+.stApp [data-testid="stFileChip"] p,
+.stApp [data-testid="stFileChip"] div,
+.stApp [data-testid="stFileUploaderFileName"],
+.stApp [data-testid="stFileUploaderFile"] * {{
     color: var(--text-primary) !important;
-    font-weight: 600 !important;
-    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    font-size: 0.82rem !important;
 }}
-.stApp div[data-testid="stFileUploaderFileData"] {{
-    color: var(--text-muted) !important;
-    font-size: 0.72rem !important;
+
+.stApp [data-testid="stFileChip"] svg,
+.stApp div[data-testid="stFileUploaderFile"] svg {{
+    fill: var(--text-primary) !important;
+    color: var(--text-primary) !important;
 }}
+
+.stApp [data-testid="stFileChipDeleteBtn"],
+.stApp [data-testid="stFileChipDeleteBtn"] button,
 .stApp div[data-testid="stFileUploaderFile"] button {{
+    background: transparent !important;
     color: var(--text-secondary) !important;
+    border: none !important;
+    padding: 2px !important;
+    cursor: pointer !important;
 }}
+
+.stApp [data-testid="stFileChipDeleteBtn"]:hover,
+.stApp [data-testid="stFileChipDeleteBtn"] button:hover,
 .stApp div[data-testid="stFileUploaderFile"] button:hover {{
     color: #ef4444 !important;
 }}
-.stApp div[data-testid="stFileUploaderFile"] svg {{
-    fill: var(--text-primary) !important;
+
+.stApp [data-testid="stFileChipDeleteBtn"]:hover svg,
+.stApp div[data-testid="stFileUploaderFile"] button:hover svg {{
+    fill: #ef4444 !important;
+    color: #ef4444 !important;
+}}
+
+/* Radio Buttons & Checkboxes (ORDER UNIT: Lots, Suits) */
+.stApp [data-testid="stRadio"],
+.stApp [data-testid="stRadio"] [role="radiogroup"],
+.stApp [data-testid="stRadio"] label,
+.stApp [data-testid="stRadio"] label *,
+.stApp [data-testid="stRadio"] span,
+.stApp [data-testid="stRadio"] p,
+.stApp [data-testid="stRadio"] div,
+.stApp [data-testid="stCheckbox"] label,
+.stApp [data-testid="stCheckbox"] label * {{
+    color: var(--text-primary) !important;
+    font-weight: 700 !important;
+    font-size: 0.86rem !important;
 }}
 
 /* Tab Styling (Streamlit 1.64+ Modern React-Aria Tabs Support) */
