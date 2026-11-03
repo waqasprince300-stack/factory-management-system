@@ -529,11 +529,19 @@ div[data-testid="stNumberInput"] button svg {{
 /* BaseWeb Selectbox & Dropdown Menus */
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"],
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
+.stApp [data-testid="stSelectbox"] div[role="combobox"],
 .stApp [data-baseweb="select"],
-.stApp [data-baseweb="select"] > div {{
+.stApp [data-baseweb="select"] > div,
+.stApp [data-baseweb="select"] div,
+.stApp [data-baseweb="select"] [role="combobox"] {{
     background-color: var(--input-bg) !important;
-    border: 1px solid var(--input-border) !important;
-    border-radius: 7px !important;
+    border-color: var(--input-border) !important;
+    color: var(--text-primary) !important;
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] div:not(:first-child),
+.stApp [data-baseweb="select"] div:not(:first-child) {{
+    background-color: transparent !important;
 }}
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div:hover,
 .stApp [data-baseweb="select"] > div:hover {{
@@ -542,9 +550,11 @@ div[data-testid="stNumberInput"] button svg {{
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] input,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] p,
 .stApp [data-baseweb="select"] span,
 .stApp [data-baseweb="select"] div,
-.stApp [data-baseweb="select"] input {{
+.stApp [data-baseweb="select"] input,
+.stApp [data-baseweb="select"] p {{
     color: var(--text-primary) !important;
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 0.85rem !important;
@@ -619,11 +629,7 @@ div[data-testid="stDownloadButton"] > button:hover {{
 }}
 
 /* Specialized Toolbar Buttons */
-.demo-btn-wrap .stButton > button {{
-    background: var(    border: 1.5px solid var(    color: var(    font-weight: 800 !important;
-}}
-.demo-btn-wrap .stButton > button:hover {{
-    background: var(    border-color: var(    color: var(}}
+/* (Demo button styles removed) */
 .clear-btn-wrap .stButton > button {{
     background: var(--del-btn-bg) !important;
     border: 1.5px solid var(--del-btn-border) !important;
@@ -694,7 +700,7 @@ div[data-testid="stDownloadButton"] > button:hover {{
 .stApp [data-testid="stTabs"] [role="tablist"],
 .stApp [data-testid="stTabs"] > div:first-child,
 .stApp .stTabs [role="tablist"] {{
-    gap: 10px !important;
+    gap: 8px !important;
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 12px !important;
@@ -702,12 +708,16 @@ div[data-testid="stDownloadButton"] > button:hover {{
     margin-bottom: 14px !important;
     display: flex !important;
     align-items: center !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    scrollbar-width: thin !important;
 }}
 
 /* All Inactive Tabs Base */
+.stApp [data-testid="stTabs"] button[role="tab"],
+.stApp [data-testid="stTabs"] button,
 .stApp [data-testid="stTabs"] [data-testid="stTab"],
 .stApp [data-testid="stTab"],
-.stApp [data-testid="stTabs"] button[role="tab"],
 .stApp [data-baseweb="tab"] {{
     background-color: var(--bg-surface-elevated) !important;
     border: 1px solid var(--border-main) !important;
@@ -718,56 +728,89 @@ div[data-testid="stDownloadButton"] > button:hover {{
     min-height: 38px !important;
     transition: all 0.2s ease !important;
     cursor: pointer !important;
+    flex-shrink: 0 !important;
 }}
 
-/* Unselected Inactive Tab Text (Force high-contrast text) */
+/* Unselected Inactive Tab Text (Force high-contrast text in Light & Dark Mode) */
+.stApp [data-testid="stTabs"] button[role="tab"] *,
+.stApp [data-testid="stTabs"] button[role="tab"] p,
+.stApp [data-testid="stTabs"] button[role="tab"] span,
+.stApp [data-testid="stTabs"] button[role="tab"] div,
+.stApp [data-testid="stTabs"] button *,
+.stApp [data-testid="stTabs"] button p,
+.stApp [data-testid="stTabs"] button span,
+.stApp [data-testid="stTabs"] button div,
 .stApp [data-testid="stTabs"] [data-testid="stTab"] *,
-.stApp [data-testid="stTab"] *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"] p,
-.stApp [data-testid="stTabs"] [data-testid="stTab"] span,
-.stApp [data-testid="stTabs"] [data-testid="stTab"] div {{
-    color: var(--text-secondary) !important;
+.stApp [data-testid="stTab"] *,
+.stApp [data-testid="stTab"] p,
+.stApp [data-baseweb="tab"] *,
+.stApp [data-baseweb="tab"] p {{
+    color: var(--text-primary) !important;
     font-weight: 700 !important;
-    font-size: 0.86rem !important;
+    font-size: 0.88rem !important;
     letter-spacing: -0.01em !important;
+    opacity: 1 !important;
 }}
 
 /* Inactive Tab Hover */
+.stApp [data-testid="stTabs"] button[role="tab"]:hover,
+.stApp [data-testid="stTabs"] button:hover,
 .stApp [data-testid="stTabs"] [data-testid="stTab"]:hover,
-.stApp [data-testid="stTab"]:hover {{
+.stApp [data-testid="stTab"]:hover,
+.stApp [data-baseweb="tab"]:hover {{
     background-color: var(--btn-hover-bg) !important;
     border-color: var(--border-focus) !important;
 }}
+.stApp [data-testid="stTabs"] button[role="tab"]:hover *,
+.stApp [data-testid="stTabs"] button:hover *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"]:hover *,
-.stApp [data-testid="stTab"]:hover * {{
+.stApp [data-testid="stTab"]:hover *,
+.stApp [data-baseweb="tab"]:hover * {{
     color: var(--text-primary) !important;
 }}
 
 /* Active Selected Tab */
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+.stApp [data-testid="stTabs"] button[aria-selected="true"],
 .stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"],
 .stApp [data-testid="stTab"][aria-selected="true"],
-.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{
+.stApp [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+.stApp button[data-baseweb="tab"][aria-selected="true"] {{
     background: var(--tab-active-bg) !important;
     border: 2px solid var(--accent-amber) !important;
     box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
 }}
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] span,
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] div,
+.stApp [data-testid="stTabs"] button[aria-selected="true"] *,
+.stApp [data-testid="stTabs"] button[aria-selected="true"] p,
 .stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] *,
-.stApp [data-testid="stTab"][aria-selected="true"] *,
 .stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] p,
-.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] span,
-.stApp [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] div {{
+.stApp [data-testid="stTab"][aria-selected="true"] *,
+.stApp [data-testid="stTab"][aria-selected="true"] p,
+.stApp [data-baseweb="tab"][aria-selected="true"] *,
+.stApp [data-baseweb="tab"][aria-selected="true"] p {{
     color: var(--accent-amber) !important;
     font-weight: 800 !important;
 }}
 
 /* Remove default Streamlit red underline and highlight line */
+.stApp [data-testid="stTabs"] [data-testid="stTabHighlight"],
+.stApp [data-testid="stTab"] [data-testid="stTabHighlight"],
 .stApp [data-testid="stTabs"] .react-aria-SelectionIndicator,
 .stApp [data-testid="stTab"] .react-aria-SelectionIndicator,
 .stApp [data-baseweb="tab-highlight"],
-.stApp [data-baseweb="tab-border"] {{
+.stApp [data-baseweb="tab-border"],
+.stApp [data-testid="stTabs"] div[aria-hidden="true"] hr,
+.stApp [data-testid="stTabs"] hr {{
     display: none !important;
     height: 0 !important;
+    width: 0 !important;
     background-color: transparent !important;
+    border: none !important;
 }}
 
 /* Direct WhatsApp Link Button */
