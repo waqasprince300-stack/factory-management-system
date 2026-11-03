@@ -1,6 +1,7 @@
 """
 PDF Report Generator for Threadworks Embroidery ERP
 Generates professional A4 Factory Production Job Card & Dhaaga Requisition Slip.
+Clean Industrial Monochromatic Layout.
 """
 
 import io
@@ -37,27 +38,29 @@ def generate_job_card_pdf(
     parts_data: list[dict],
     cones_data: list[dict],
     total_order_cones: int,
-    bobbin_data: dict = None
+    bobbin_data: dict = None,
+    bukram_data: dict = None,
+    costing_data: dict = None
 ) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=28,
-        leftMargin=28,
-        topMargin=26,
-        bottomMargin=26
+        rightMargin=26,
+        leftMargin=26,
+        topMargin=24,
+        bottomMargin=24
     )
 
     styles = getSampleStyleSheet()
 
-    # Typography
+    # Clean Typography (Monochrome Slate Aesthetic)
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=16,
-        leading=19,
+        fontSize=15,
+        leading=18,
         textColor=colors.HexColor('#0f172a'),
         alignment=1
     )
@@ -66,8 +69,8 @@ def generate_job_card_pdf(
         'DocSubTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=10,
-        leading=13,
+        fontSize=9.5,
+        leading=12,
         textColor=colors.HexColor('#d97706'),
         alignment=1
     )
@@ -76,8 +79,8 @@ def generate_job_card_pdf(
         'MetaText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=8,
+        leading=11,
         textColor=colors.HexColor('#334155')
     )
 
@@ -85,8 +88,8 @@ def generate_job_card_pdf(
         'BoldMeta',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=8,
+        leading=11,
         textColor=colors.HexColor('#0f172a')
     )
 
@@ -94,8 +97,8 @@ def generate_job_card_pdf(
         'SecHeader',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=9.5,
-        leading=12,
+        fontSize=9,
+        leading=11.5,
         textColor=colors.HexColor('#0f172a')
     )
 
@@ -103,8 +106,8 @@ def generate_job_card_pdf(
         'THeader',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.white
     )
 
@@ -112,8 +115,8 @@ def generate_job_card_pdf(
         'TBody',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8,
-        leading=10.5,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.HexColor('#1e293b')
     )
 
@@ -121,8 +124,8 @@ def generate_job_card_pdf(
         'TBodyBold',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10.5,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.HexColor('#0f172a')
     )
 
@@ -130,8 +133,8 @@ def generate_job_card_pdf(
 
     # Title & Subtitle Banner
     elements.append(Paragraph("THREADWORKS EMBROIDERY FACTORY", title_style))
-    elements.append(Paragraph("FACTORY PRODUCTION JOB CARD & DHAAGA REQUISITION", subtitle_style))
-    elements.append(Spacer(1, 8))
+    elements.append(Paragraph("FACTORY PRODUCTION JOB CARD & STORE REQUISITION", subtitle_style))
+    elements.append(Spacer(1, 6))
 
     # Order Meta Table (3 columns x 3 rows)
     info_data = [
@@ -151,22 +154,22 @@ def generate_job_card_pdf(
             Paragraph(f"<b>Cone Size:</b> {cone_capacity_val:,.0f} {cone_unit} ({waste_pct:.0f}% waste)", meta_style)
         ]
     ]
-    info_table = Table(info_data, colWidths=[180, 185, 174])
+    info_table = Table(info_data, colWidths=[185, 185, 173])
     info_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8fafc')),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#cbd5e1')),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('LEFTPADDING', (0,0), (-1,-1), 7),
-        ('RIGHTPADDING', (0,0), (-1,-1), 7),
+        ('TOPPADDING', (0,0), (-1,-1), 3.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3.5),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
     ]))
     elements.append(info_table)
-    elements.append(Spacer(1, 9))
+    elements.append(Spacer(1, 7))
 
     # Suit Parts Section
     elements.append(Paragraph("<b>SUIT PARTS CUT-SHEET & HEADING BREAKDOWN</b>", section_hdr))
-    elements.append(Spacer(1, 3))
+    elements.append(Spacer(1, 2.5))
     parts_header = [
         Paragraph("Part Name", table_header),
         Paragraph("Setting / Head Mode", table_header),
@@ -186,23 +189,23 @@ def generate_job_card_pdf(
             Paragraph(f"Rs {float(p.get('rate', 0.0)):,.2f}", table_body_bold)
         ])
 
-    p_table = Table(p_rows, colWidths=[165, 134, 60, 45, 75, 60])
+    p_table = Table(p_rows, colWidths=[165, 134, 60, 45, 75, 64])
     p_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1e293b')),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#cbd5e1')),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
         ('LEFTPADDING', (0,0), (-1,-1), 5),
         ('RIGHTPADDING', (0,0), (-1,-1), 5),
     ]))
     elements.append(p_table)
-    elements.append(Spacer(1, 9))
+    elements.append(Spacer(1, 7))
 
     # Dhaaga Requisition Table
     elements.append(Paragraph("<b>DHAAGA (CONES) REQUISITION — STORE ISSUE LIST</b>", section_hdr))
-    elements.append(Spacer(1, 3))
+    elements.append(Spacer(1, 2.5))
     dhaaga_header = [
         Paragraph("Needle #", table_header),
         Paragraph("Color Code", table_header),
@@ -222,55 +225,64 @@ def generate_job_card_pdf(
             Paragraph(f"<b>{d.get('cones', 0)} Cones</b>", table_body_bold)
         ])
 
-    d_table = Table(d_rows, colWidths=[52, 75, 172, 85, 65, 90])
+    d_table = Table(d_rows, colWidths=[52, 75, 174, 85, 65, 92])
     d_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#d97706')),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#334155')),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#cbd5e1')),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#fef3c7')]),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5),
         ('LEFTPADDING', (0,0), (-1,-1), 5),
         ('RIGHTPADDING', (0,0), (-1,-1), 5),
     ]))
     elements.append(d_table)
-    elements.append(Spacer(1, 7))
+    elements.append(Spacer(1, 6))
 
-    # Bobbin / Khicha & Summary Bar
-    bobbin_txt = ""
+    # Material Summary Bar (Dhaaga + Bobbin + Bukram)
+    mat_parts = [f"<b>Kul Dhaaga Cones:</b> {total_order_cones} Cones"]
     if bobbin_data:
         b_clr = bobbin_data.get("color", "White")
         b_cones = bobbin_data.get("cones", 0)
-        b_meters = bobbin_data.get("meters", 0.0)
-        bobbin_txt = f" | <b>Bobbin (Khicha - {b_clr}):</b> {b_cones} Cones ({b_meters:,.0f}m)"
+        b_kg = bobbin_data.get("kg", 0.0)
+        b_txt = f"<b>Bobbin ({b_clr}):</b> {b_cones} Cones"
+        if b_kg > 0:
+            b_txt += f" (~{b_kg} kg)"
+        mat_parts.append(b_txt)
+    if bukram_data:
+        bk_rolls = bukram_data.get("rolls", 0)
+        bk_m = bukram_data.get("meters", 0.0)
+        mat_parts.append(f"<b>Bukram/Paper:</b> {bk_rolls} Rolls ({bk_m:,.0f}m)")
 
-    summary_text = f"<b>KUL DHAAGA CONES: {total_order_cones} Cones</b>{bobbin_txt} | <b>Total Repeats:</b> {total_runs} R | <b>Est:</b> ~{shifts_needed} Shifts ({days_needed} Din)"
+    summary_text = " | ".join(mat_parts)
+    summary_text += f" | <b>Machine Repeats:</b> {total_runs} R"
+
     cones_summary = Table(
         [[
-            Paragraph(summary_text, ParagraphStyle('KCS', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8.5, textColor=colors.HexColor('#92400e')))
+            Paragraph(summary_text, ParagraphStyle('KCS', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, textColor=colors.HexColor('#0f172a')))
         ]],
-        colWidths=[539]
+        colWidths=[543]
     )
     cones_summary.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#fef3c7')),
-        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#f59e0b')),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-        ('LEFTPADDING', (0,0), (-1,-1), 8),
-        ('RIGHTPADDING', (0,0), (-1,-1), 8),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#cbd5e1')),
+        ('TOPPADDING', (0,0), (-1,-1), 4.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4.5),
+        ('LEFTPADDING', (0,0), (-1,-1), 7),
+        ('RIGHTPADDING', (0,0), (-1,-1), 7),
     ]))
     elements.append(cones_summary)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 10))
 
-    # Signatures Table (KeepTogether so it doesn't break onto a 2nd page)
+    # Signatures Table (KeepTogether so it fits clean)
     sig_data = [
         [
             Paragraph("<b>Master Signature:</b> ____________________", meta_style),
-            Paragraph("<b>Store Incharge:</b> ____________________", meta_style),
-            Paragraph("<b>Gate / Delivery:</b> ____________________", meta_style)
+            Paragraph("<b>Store Issue Signature:</b> ____________________", meta_style),
+            Paragraph("<b>Gate Pass / Checked:</b> ____________________", meta_style)
         ]
     ]
-    sig_table = Table(sig_data, colWidths=[180, 180, 179])
+    sig_table = Table(sig_data, colWidths=[181, 181, 181])
     sig_table.setStyle(TableStyle([
         ('TOPPADDING', (0,0), (-1,-1), 4),
         ('BOTTOMPADDING', (0,0), (-1,-1), 4),
@@ -279,4 +291,3 @@ def generate_job_card_pdf(
 
     doc.build(elements)
     return buffer.getvalue()
-
