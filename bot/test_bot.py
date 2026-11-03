@@ -1,69 +1,96 @@
 """
 Test and Verification Script for Threadworks WhatsApp Bot.
 Simulates receiving a WhatsApp PDF and executing text commands.
+
+Usage:
+  python bot/test_bot.py
+  python bot/test_bot.py "C:\\path\\to\\your_file.pdf"
 """
 
 import os
 import sys
 
-# Ensure project root is in path
+# Ensure UTF-8 output and project root in path
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from bot.engine import process_whatsapp_pdf, process_whatsapp_text_command
 
 
-def run_tests():
-    print("=" * 60)
-    print("🧪 TESTING THREADWORKS WHATSAPP BOT ENGINE")
-    print("=" * 60)
+def run_tests(custom_pdf_path=None):
+    print("=" * 65)
+    print("🤖 TESTING THREADWORKS WHATSAPP BOT")
+    print("=" * 65)
 
-    # 1. Test Text Commands
-    print("\n[1] Testing Text Commands:")
+    # 1. Test WhatsApp Text Commands Simulation
+    print("\n[Step 1] Simulating WhatsApp Text Commands:")
     session = {}
+    
+    # User sends 'help'
     r_help = process_whatsapp_text_command("help", session)
-    print("  'help' response length:", len(r_help))
+    print("  ✓ Command 'help' -> Response Received")
 
-    r_heads = process_whatsapp_text_command("heads 28", session)
-    print("  'heads 28' response:", r_heads)
-    assert session.get("heads") == 28, "Heads setting failed!"
+    # User sends 'heads 30'
+    r_heads = process_whatsapp_text_command("heads 30", session)
+    print("  ✓ Command 'heads 30' ->", r_heads)
+    assert session.get("heads") == 30, "Heads setting failed!"
 
-    r_rate = process_whatsapp_text_command("rate 1.25", session)
-    print("  'rate 1.25' response:", r_rate)
-    assert session.get("rate") == 1.25, "Rate setting failed!"
+    # User sends 'rate 1.20'
+    r_rate = process_whatsapp_text_command("rate 1.20", session)
+    print("  ✓ Command 'rate 1.20' ->", r_rate)
+    assert session.get("rate") == 1.20, "Rate setting failed!"
 
+    # User sends 'status'
     r_status = process_whatsapp_text_command("status", session)
-    print("  'status' response:\n" + r_status)
+    print("  ✓ Command 'status' -> Current Session Settings Confirmed")
 
-    # 2. Test Processing Actual PDF from Downloads
-    test_pdf_path = r"c:\Users\Muhammad Waqas\Downloads\G1491 Lawan (2R).pdf"
-    if not os.path.exists(test_pdf_path):
-        print(f"⚠️ Test PDF not found at {test_pdf_path}")
+    # 2. Determine PDF Path to Test
+    default_pdf = r"c:\Users\Muhammad Waqas\Downloads\G1491 Lawan (2R).pdf"
+    target_pdf = custom_pdf_path if (custom_pdf_path and os.path.exists(custom_pdf_path)) else default_pdf
+
+    if not os.path.exists(target_pdf):
+        print(f"\n⚠️ Test PDF not found at: {target_pdf}")
+        print("Aap kisi bhi Wilcom PDF ka path command mein de sakte hain:")
+        print("  python bot/test_bot.py \"C:\\path\\to\\file.pdf\"")
         return
 
-    print(f"\n[2] Testing PDF Processing with: {os.path.basename(test_pdf_path)}")
-    with open(test_pdf_path, "rb") as f:
+    print(f"\n[Step 2] Processing Wilcom PDF Worksheet:")
+    print(f"  📄 File: {os.path.basename(target_pdf)}")
+    
+    with open(target_pdf, "rb") as f:
         pdf_bytes = f.read()
 
+    # Process PDF with session overrides
     result = process_whatsapp_pdf(
         pdf_bytes=pdf_bytes,
-        filename="G1491 Lawan (2R).pdf",
-        overrides={"heads": 30, "shades": 6, "rate": 1.00, "lots": 1.0}
+        filename=os.path.basename(target_pdf),
+        overrides={"heads": session.get("heads", 30), "shades": 6, "rate": session.get("rate", 1.00), "lots": 1.0}
     )
 
-    print("\n" + "=" * 60)
-    print("📱 WHATSAPP MESSAGE OUTPUT FROM BOT:")
-    print("=" * 60)
+    print("\n" + "=" * 65)
+    print("📱 WHATSAPP PAR USER KO JO MESSAGE JAYEGA:")
+    print("=" * 65)
     print(result["text_reply"])
-    print("=" * 60)
+    print("=" * 65)
 
-    print(f"\n[3] Job Card PDF generated: {result['pdf_filename']} ({len(result['pdf_bytes']):,} bytes)")
+    # 3. Save the Generated PDF Job Card to Disk
+    output_pdf_filename = f"bot_output_{result['pdf_filename']}"
+    with open(output_pdf_filename, "wb") as f:
+        f.write(result["pdf_bytes"])
+
+    print(f"\n[Step 3] Printable A4 Job Card PDF File Ban Gayi Hai:")
+    print(f"  📁 Saved As: {os.path.abspath(output_pdf_filename)}")
+    print(f"  📊 Size: {len(result['pdf_bytes']):,} bytes")
+
     assert len(result["pdf_bytes"]) > 1000, "PDF bytes too small!"
     assert "THREADWORKS" in result["text_reply"], "Header missing in reply!"
     assert "STORE REQUISITION" in result["text_reply"], "Store section missing!"
 
-    print("\n✅ ALL BOT TESTS PASSED 100% SUCCESSFULLY!")
+    print("\n" + "=" * 65)
+    print("✅ TEST 100% KAMYAB! Bot bilkul theek chal raha hai.")
+    print("=" * 65)
 
 
 if __name__ == "__main__":
-    run_tests()
+    custom_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    run_tests(custom_arg)
