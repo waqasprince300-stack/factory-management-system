@@ -859,7 +859,7 @@ with c_up_box:
 with c_up_btns:
     c_b1, c_b2 = st.columns([1.3, 1.0])
     with c_b1:
-        st.markdown('<a href="whatsapp://" class="wa-direct-btn" style="padding:9px 10px !important; font-size:0.82rem !important; height:38px; text-decoration:none !important;" title="WhatsApp Application Kholein">📲 WhatsApp</a>', unsafe_allow_html=True)
+        st.markdown('<a href="whatsapp://send" target="_blank" class="wa-direct-btn" style="padding:9px 10px !important; font-size:0.82rem !important; height:38px; text-decoration:none !important;" title="WhatsApp Application Kholein">📲 WhatsApp</a>', unsafe_allow_html=True)
     with c_b2:
         if st.button("🗑️ Reset", key="clear_uploaded_btn", use_container_width=True, help="Tamam files aur calculations clear karein"):
             st.session_state.parts = {}
