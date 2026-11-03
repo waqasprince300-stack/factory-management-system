@@ -180,13 +180,7 @@ if is_dark:
         --del-btn-hover-bg: rgba(239, 68, 68, 0.35);
         --del-btn-hover-border: #ef4444;
         --del-btn-hover-text: #ffffff;
-        --demo-btn-bg: rgba(245, 158, 11, 0.12);
-        --demo-btn-border: #f59e0b;
-        --demo-btn-text: #f59e0b;
-        --demo-btn-hover-bg: rgba(245, 158, 11, 0.22);
-        --demo-btn-hover-border: #fbbf24;
-        --demo-btn-hover-text: #ffffff;
-    }
+                                                    }
     """
 else:
     theme_css_vars = """
@@ -230,13 +224,7 @@ else:
         --del-btn-hover-bg: #fecaca;
         --del-btn-hover-border: #dc2626;
         --del-btn-hover-text: #991b1b;
-        --demo-btn-bg: #fef3c7;
-        --demo-btn-border: #d97706;
-        --demo-btn-text: #92400e;
-        --demo-btn-hover-bg: #fde68a;
-        --demo-btn-hover-border: #b45309;
-        --demo-btn-hover-text: #78350f;
-    }
+                                                    }
     """
 
 st.markdown(f"""
@@ -632,16 +620,10 @@ div[data-testid="stDownloadButton"] > button:hover {{
 
 /* Specialized Toolbar Buttons */
 .demo-btn-wrap .stButton > button {{
-    background: var(--demo-btn-bg) !important;
-    border: 1.5px solid var(--demo-btn-border) !important;
-    color: var(--demo-btn-text) !important;
-    font-weight: 800 !important;
+    background: var(    border: 1.5px solid var(    color: var(    font-weight: 800 !important;
 }}
 .demo-btn-wrap .stButton > button:hover {{
-    background: var(--demo-btn-hover-bg) !important;
-    border-color: var(--demo-btn-hover-border) !important;
-    color: var(--demo-btn-hover-text) !important;
-}}
+    background: var(    border-color: var(    color: var(}}
 .clear-btn-wrap .stButton > button {{
     background: var(--del-btn-bg) !important;
     border: 1.5px solid var(--del-btn-border) !important;
@@ -834,271 +816,38 @@ div[data-testid="stDownloadButton"] > button:hover {{
 # ═══════════════════════════════════════════════════════════════════════════
 # TOP HEADER & THEME TOGGLE
 # ═══════════════════════════════════════════════════════════════════════════
-is_quick = (st.session_state.get("app_mode", "quick") == "quick")
-
-col_hdr_main, col_hdr_theme = st.columns([7.4, 2.6])
+col_hdr_main, col_hdr_theme = st.columns([7.8, 2.2])
 
 with col_hdr_main:
-    mode_tag = '<span class="mode-pill">⚡ Quick Mode (Fast)</span>' if is_quick else '<span class="mode-pill" style="border-color:var(--border-focus); color:var(--text-primary);">📊 Detailed ERP</span>'
-    st.markdown(f"""
+    st.markdown("""
     <div class="brand-header">
         <div class="brand-title-box">
             <span class="brand-logo-icon">🧵</span>
             <div>
-                <div class="brand-main-text">Threadworks • Factory Embroidery Master {mode_tag}</div>
+                <div class="brand-main-text">Threadworks • Factory Embroidery ERP</div>
                 <div class="brand-sub-text">Separate Systems: Dhaaga (Cones) Calculation & Stitch Rate (per 1,000 stitches)</div>
             </div>
-        </div>
-        <div>
-            <span class="brand-pill">⚡ <strong>{st.session_state.saved_heads} Heads</strong></span>
-            <span class="brand-pill">🎨 <strong>{st.session_state.saved_shades} Colors</strong></span>
-            <span class="brand-pill">📦 <strong>{st.session_state.saved_lots:g} Lot</strong></span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_hdr_theme:
-    st.markdown('<div class="theme-toggle-wrap" style="padding-top:8px;">', unsafe_allow_html=True)
-    btn_m1, btn_m2 = st.columns(2)
-    with btn_m1:
-        mode_btn_label = "📊 Detail" if is_quick else "⚡ Quick"
-        mode_btn_tip = "Detailed mode par switch karein" if is_quick else "Quick mode par switch karein"
-        if st.button(mode_btn_label, key="app_mode_toggle_btn", use_container_width=True, help=mode_btn_tip):
-            st.session_state.app_mode = "detailed" if is_quick else "quick"
-            st.rerun()
-    with btn_m2:
-        theme_icon = "☀️ Light" if is_dark else "🌙 Dark"
-        theme_tooltip = "Light Mode par switch karein" if is_dark else "Dark Mode par switch karein"
-        if st.button(theme_icon, key="theme_toggle_btn", use_container_width=True, help=theme_tooltip):
-            new_theme = "Light" if is_dark else "Dark"
-            st.session_state.theme_mode = new_theme
-            st.query_params["theme"] = new_theme.lower()
-            st.rerun()
+    st.markdown('<div class="theme-toggle-wrap" style="padding-top:6px;">', unsafe_allow_html=True)
+    theme_icon = "☀️ Light" if is_dark else "🌙 Dark"
+    theme_tooltip = "Light Mode" if is_dark else "Dark Mode"
+    if st.button(theme_icon, key="theme_toggle_btn", use_container_width=True, help=theme_tooltip):
+        new_theme = "Light" if is_dark else "Dark"
+        st.session_state.theme_mode = new_theme
+        st.query_params["theme"] = new_theme.lower()
+        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# MACHINE & ORDER SETTINGS PANEL (BUNYAADI SETTINGS)
+# 1. FILE UPLOAD HERO SECTION (TOP PRIORITY ON MOBILE)
 # ═══════════════════════════════════════════════════════════════════════════
-if is_quick:
-    st.markdown('<div class="panel-title">⚡ Quick Order Settings (Machine, Order, Rate)</div>', unsafe_allow_html=True)
-    qp1, qp2, qp3, qp4 = st.columns([1.8, 1.8, 3.4, 2.0])
+c_up_box, c_up_btns = st.columns([7.4, 2.6])
 
-    with qp1:
-        machine_heads = st.number_input(
-            "Machine Heads",
-            min_value=1,
-            max_value=120,
-            value=int(st.session_state.saved_heads),
-            step=1,
-            help="Total machine heads (Default: 30 / 28 Heads)"
-        )
-        if machine_heads != st.session_state.saved_heads:
-            st.session_state.saved_heads = machine_heads
-            st.query_params["heads"] = str(machine_heads)
-            st.rerun()
-
-    with qp2:
-        base_colors_count = st.number_input(
-            "Base Shades / Colors",
-            min_value=1,
-            max_value=30,
-            value=int(st.session_state.saved_shades),
-            step=1,
-            help="Base cloth colors per lot (Default: 6 Colors)"
-        )
-        if base_colors_count != st.session_state.saved_shades:
-            st.session_state.saved_shades = base_colors_count
-            st.query_params["shades"] = str(base_colors_count)
-
-    pieces_per_lot = machine_heads * base_colors_count
-
-    with qp3:
-        col_q_mode, col_q_val = st.columns([1.0, 1.4])
-        with col_q_mode:
-            lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
-        with col_q_val:
-            if lots_mode == "Lots":
-                lots_count = st.number_input(
-                    "Kul Lots (LOTS)",
-                    min_value=0.5,
-                    max_value=50.0,
-                    value=float(st.session_state.saved_lots),
-                    step=0.5,
-                    help=f"Total Lots (1 Lot = {pieces_per_lot} Suits)"
-                )
-                if lots_count != st.session_state.saved_lots:
-                    st.session_state.saved_lots = lots_count
-                    st.query_params["lots"] = f"{lots_count:g}"
-                num_pieces = int(round(pieces_per_lot * lots_count))
-            else:
-                num_pieces = st.number_input(
-                    "Kul Suits (SUITS)",
-                    min_value=1,
-                    max_value=100000,
-                    value=int(round(pieces_per_lot * st.session_state.saved_lots)),
-                    step=machine_heads
-                )
-                lots_count = round(num_pieces / pieces_per_lot, 2)
-
-    with qp4:
-        stitch_rate = st.number_input(
-            "Stitch Rate (per 1,000)",
-            min_value=0.05,
-            max_value=10.0,
-            value=float(st.session_state.saved_rate),
-            step=0.05,
-            format="%.2f",
-            help="Rate per 1,000 stitches in PKR"
-        )
-        if stitch_rate != st.session_state.saved_rate:
-            st.session_state.saved_rate = stitch_rate
-            st.query_params["rate"] = f"{stitch_rate:.2f}"
-
-    # Collapsed Quick Mode Advance Options (Cone Size, Wastage, Bobbin)
-    with st.expander("⚙️ Dhaaga Size, Wastage % aur Bobbin (Khicha) Options", expanded=False):
-        ap1, ap2, ap3, ap4, ap5 = st.columns([1.5, 2.0, 1.8, 2.3, 2.4])
-        with ap1:
-            cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
-        with ap2:
-            default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
-            cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
-        with ap3:
-            waste_pct = st.number_input("Wastage %", min_value=0.0, max_value=30.0, value=float(st.session_state.saved_waste), step=1.0, format="%.1f")
-            if waste_pct != st.session_state.saved_waste:
-                st.session_state.saved_waste = waste_pct
-                st.query_params["waste"] = f"{waste_pct:.1f}"
-        with ap4:
-            bobbin_cone_capacity = st.number_input("Bobbin Cone (m)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
-            st.session_state.bobbin_cone_cap = bobbin_cone_capacity
-        with ap5:
-            bobbin_color = st.selectbox("Bobbin Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
-            st.session_state.bobbin_color = bobbin_color
-
-else:
-    # Detailed ERP Settings Mode
-    st.markdown('<div class="panel-title">⚙️ Machine & Order Settings (Detailed Mode)</div>', unsafe_allow_html=True)
-    cp1, cp2, cp3, cp4, cp5, cp6 = st.columns([1.6, 1.6, 2.4, 2.0, 1.4, 1.4])
-
-    with cp1:
-        machine_heads = st.number_input(
-            "Machine Heads (HEADS)",
-            min_value=1,
-            max_value=120,
-            value=int(st.session_state.saved_heads),
-            step=1,
-            help="Machine heads"
-        )
-        if machine_heads != st.session_state.saved_heads:
-            st.session_state.saved_heads = machine_heads
-            st.query_params["heads"] = str(machine_heads)
-            st.rerun()
-
-    with cp2:
-        base_colors_count = st.number_input(
-            "Base Shades / Colors",
-            min_value=1,
-            max_value=30,
-            value=int(st.session_state.saved_shades),
-            step=1,
-            help="Base cloth colors per lot"
-        )
-        if base_colors_count != st.session_state.saved_shades:
-            st.session_state.saved_shades = base_colors_count
-            st.query_params["shades"] = str(base_colors_count)
-
-    pieces_per_lot = machine_heads * base_colors_count
-
-    with cp3:
-        col_q_mode, col_q_val = st.columns([1.0, 1.4])
-        with col_q_mode:
-            lots_mode = st.radio("Lots ya Suits", ["Lots", "Suits"], index=0, horizontal=True)
-        with col_q_val:
-            if lots_mode == "Lots":
-                lots_count = st.number_input(
-                    "Kul Lots (LOTS)",
-                    min_value=0.5,
-                    max_value=50.0,
-                    value=float(st.session_state.saved_lots),
-                    step=0.5,
-                    help="Total Lots"
-                )
-                if lots_count != st.session_state.saved_lots:
-                    st.session_state.saved_lots = lots_count
-                    st.query_params["lots"] = f"{lots_count:g}"
-                num_pieces = int(round(pieces_per_lot * lots_count))
-            else:
-                num_pieces = st.number_input(
-                    "Kul Suits (SUITS)",
-                    min_value=1,
-                    max_value=100000,
-                    value=int(round(pieces_per_lot * st.session_state.saved_lots)),
-                    step=machine_heads
-                )
-                lots_count = round(num_pieces / pieces_per_lot, 2)
-
-    with cp4:
-        col_u_type, col_u_val = st.columns([1.0, 1.4])
-        with col_u_type:
-            cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
-        with col_u_val:
-            default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
-            cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
-
-    with cp5:
-        waste_pct = st.number_input(
-            "Dhaaga Wastage %",
-            min_value=0.0,
-            max_value=30.0,
-            value=float(st.session_state.saved_waste),
-            step=1.0,
-            format="%.1f",
-            help="Dhaaga wastage"
-        )
-        if waste_pct != st.session_state.saved_waste:
-            st.session_state.saved_waste = waste_pct
-            st.query_params["waste"] = f"{waste_pct:.1f}"
-
-    with cp6:
-        stitch_rate = st.number_input(
-            "Stitch Rate (per 1,000)",
-            min_value=0.05,
-            max_value=10.0,
-            value=float(st.session_state.saved_rate),
-            step=0.05,
-            format="%.2f",
-            help="Rate per 1,000 stitches in PKR"
-        )
-        if stitch_rate != st.session_state.saved_rate:
-            st.session_state.saved_rate = stitch_rate
-            st.query_params["rate"] = f"{stitch_rate:.2f}"
-
-    # Bobbin controls in detailed mode
-    col_b1, col_b2 = st.columns(2)
-    with col_b1:
-        bobbin_cone_capacity = st.number_input("Bobbin Thread Cone Size (Meters)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
-        st.session_state.bobbin_cone_cap = bobbin_cone_capacity
-    with col_b2:
-        bobbin_color = st.selectbox("Bobbin Thread Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
-        st.session_state.bobbin_color = bobbin_color
-
-# Quick Summary Pill Bar
-suits_per_color_calc = int(round(num_pieces / max(1, base_colors_count)))
-st.markdown(f"""
-<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-radius:8px; padding:6px 12px; font-size:0.78rem; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-    <span>📦 <strong>Kul Order:</strong> <span style="color:var(--text-primary); font-weight:700;">{num_pieces} Suits</span> ({lots_count:g} Lots)</span>
-    <span>⚡ <strong>Machine:</strong> {machine_heads} Heads (1 Lot = {pieces_per_lot} Suits)</span>
-    <span>🎨 <strong>Har Color k Suits:</strong> <span style="color:var(--accent-amber); font-weight:700;">{suits_per_color_calc} Suits</span> ({base_colors_count} Total Shades)</span>
-    <span>🧵 <strong>Cone Size:</strong> {cone_capacity_val:,.0f} {cone_unit} (Wastage: {waste_pct:.0f}%)</span>
-    <span>💵 <strong>Stitch Rate:</strong> <span style="color:var(--accent-green); font-weight:700;">Rs {stitch_rate:.2f}</span> / 1,000 stitches</span>
-</div>
-""", unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# FILE UPLOAD & CONTROLS TOOLBAR
-# ═══════════════════════════════════════════════════════════════════════════
-c_up_file, c_up_demo, c_up_clear = st.columns([6.8, 2.2, 1.0])
-
-with c_up_file:
+with c_up_box:
     uploaded_files = st.file_uploader(
         "Upload Wilcom PDF / Design Images:",
         type=["pdf", "png", "jpg", "jpeg", "webp"],
@@ -1107,83 +856,122 @@ with c_up_file:
         label_visibility="collapsed"
     )
 
-with c_up_demo:
-    st.markdown('<div class="demo-btn-wrap">', unsafe_allow_html=True)
-    if st.button("✨ Sample Suit Load Karein (Demo)", use_container_width=True, help="Front, Daman 4H, Sleeves 9H, Neck ka sample load karein"):
-        st.session_state.suit_design_name = "Sample_Suit_D-101"
-        st.session_state.parts = {
-            "demo_front": {
-                "design_name": "FRONT (Gala & Body)",
-                "file_name": "Front_Gala.pdf",
-                "stitches": 48500,
-                "repeat": 1.0,
-                "mode": "1_rep_all",
-                "heads": machine_heads,
-                "sequins_total": 0,
-                "total_bobbin_m": 85.0,
-                "thread_colors": [
-                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 240.0},
-                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 120.0},
-                    {"needle": 3, "code": "C-305", "name": "Resham Maroon", "length_m": 85.0}
-                ]
-            },
-            "demo_neck": {
-                "design_name": "NECK PATTI (14H Alternate)",
-                "file_name": "Neck_Patti.pdf",
-                "stitches": 22000,
-                "repeat": 1.0,
-                "mode": "1_rep_half",
-                "heads": machine_heads // 2,
-                "sequins_total": 0,
-                "total_bobbin_m": 42.0,
-                "thread_colors": [
-                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 110.0},
-                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 65.0}
-                ]
-            },
-            "demo_daman": {
-                "design_name": "DAMAN BORDER (4 Head Multi-Color)",
-                "file_name": "Daman_Border_(4_Head).pdf",
-                "stitches": 100000,
-                "repeat": 1.0,
-                "mode": "head_4",
-                "heads": round(machine_heads / base_colors_count),
-                "sequins_total": 0,
-                "total_bobbin_m": 160.0,
-                "thread_colors": [
-                    {"needle": 1, "code": "Same", "name": "Same Match Base", "length_m": 310.0},
-                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 180.0},
-                    {"needle": 4, "code": "C-412", "name": "Rust Orange", "length_m": 140.0}
-                ]
-            },
-            "demo_sleeves": {
-                "design_name": "SLEEVES MOTIF (9 Head)",
-                "file_name": "Sleeves_Motif_(9_Head).pdf",
-                "stitches": 35000,
-                "repeat": 1.0,
-                "mode": "head_9",
-                "heads": round(machine_heads / 3),
-                "sequins_total": 0,
-                "total_bobbin_m": 60.0,
-                "thread_colors": [
-                    {"needle": 2, "code": "G-102", "name": "Gold Tilla", "length_m": 95.0},
-                    {"needle": 5, "code": "C-501", "name": "Emerald Green", "length_m": 70.0}
-                ]
-            }
-        }
-        st.session_state.custom_same_overrides = {}
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+with c_up_btns:
+    c_b1, c_b2 = st.columns([1.3, 1.0])
+    with c_b1:
+        st.markdown('<a href="whatsapp://" class="wa-direct-btn" style="padding:9px 10px !important; font-size:0.82rem !important; height:38px; text-decoration:none !important;" title="WhatsApp Application Kholein">📲 WhatsApp</a>', unsafe_allow_html=True)
+    with c_b2:
+        if st.button("🗑️ Reset", key="clear_uploaded_btn", use_container_width=True, help="Tamam files aur calculations clear karein"):
+            st.session_state.parts = {}
+            st.session_state.suit_design_name = ""
+            st.session_state.custom_same_overrides = {}
+            st.session_state.uploader_key += 1
+            st.rerun()
 
-with c_up_clear:
-    st.markdown('<div class="clear-btn-wrap">', unsafe_allow_html=True)
-    if st.button("🗑️ Clear", use_container_width=True, help="Tamam parts khatam karein"):
-        st.session_state.parts = {}
-        st.session_state.suit_design_name = ""
-        st.session_state.custom_same_overrides = {}
-        st.session_state.uploader_key += 1
+# WhatsApp Mobile Helper Guide Banner
+st.markdown("""
+<div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-left:3.5px solid var(--accent-amber); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.77rem; color:var(--text-secondary); line-height:1.45;">
+    💡 <strong>WhatsApp Mobile Guide:</strong> WhatsApp par aayi hui PDF <em>'Gallery'</em> mein show nahi hoti (kyun k PDF document hota hai, image nahi).<br/>
+    WhatsApp mein file par tap kar k download karein ➔ Phir yahan <strong>'Browse files'</strong> dabayein ➔ Android k <strong>'Recent'</strong> ya <strong>'Documents ➔ WhatsApp'</strong> se select karein.
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2. MACHINE & ORDER SETTINGS (COMPACT 4 CONTROLS + ADVANCE DRAWER)
+# ═══════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="panel-title" style="margin-bottom:6px;">⚙️ Order & Machine Settings</div>', unsafe_allow_html=True)
+sp1, sp2, sp3, sp4 = st.columns([1.3, 1.3, 2.4, 1.6])
+
+with sp1:
+    machine_heads = st.number_input(
+        "Machine Heads",
+        min_value=1,
+        max_value=120,
+        value=int(st.session_state.saved_heads),
+        step=1,
+        help="Machine Heads (Default: 30 / 28 Heads)"
+    )
+    if machine_heads != st.session_state.saved_heads:
+        st.session_state.saved_heads = machine_heads
+        st.query_params["heads"] = str(machine_heads)
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+
+with sp2:
+    base_colors_count = st.number_input(
+        "Base Shades",
+        min_value=1,
+        max_value=30,
+        value=int(st.session_state.saved_shades),
+        step=1,
+        help="Base cloth colors per lot (Default: 6 Colors)"
+    )
+    if base_colors_count != st.session_state.saved_shades:
+        st.session_state.saved_shades = base_colors_count
+        st.query_params["shades"] = str(base_colors_count)
+
+pieces_per_lot = machine_heads * base_colors_count
+
+with sp3:
+    col_q_mode, col_q_val = st.columns([1.0, 1.4])
+    with col_q_mode:
+        lots_mode = st.radio("Order Unit", ["Lots", "Suits"], index=0, horizontal=True)
+    with col_q_val:
+        if lots_mode == "Lots":
+            lots_count = st.number_input(
+                "Kul Lots (LOTS)",
+                min_value=0.5,
+                max_value=50.0,
+                value=float(st.session_state.saved_lots),
+                step=0.5,
+                help=f"1 Lot = {pieces_per_lot} Suits ({base_colors_count} Shades × {machine_heads}H)"
+            )
+            if lots_count != st.session_state.saved_lots:
+                st.session_state.saved_lots = lots_count
+                st.query_params["lots"] = f"{lots_count:g}"
+            num_pieces = int(round(pieces_per_lot * lots_count))
+        else:
+            num_pieces = st.number_input(
+                "Kul Suits (SUITS)",
+                min_value=1,
+                max_value=100000,
+                value=int(round(pieces_per_lot * st.session_state.saved_lots)),
+                step=machine_heads
+            )
+            lots_count = round(num_pieces / pieces_per_lot, 2)
+
+with sp4:
+    stitch_rate = st.number_input(
+        "Stitch Rate (/1k)",
+        min_value=0.05,
+        max_value=10.0,
+        value=float(st.session_state.saved_rate),
+        step=0.05,
+        format="%.2f",
+        help="Rate per 1,000 stitches in PKR"
+    )
+    if stitch_rate != st.session_state.saved_rate:
+        st.session_state.saved_rate = stitch_rate
+        st.query_params["rate"] = f"{stitch_rate:.2f}"
+
+# Collapsed Quick Mode Advance Options (Cone Size, Wastage, Bobbin)
+with st.expander("⚙️ Advance Settings (Cone Size, Wastage %, Bobbin Khicha)", expanded=False):
+    ap1, ap2, ap3, ap4, ap5 = st.columns([1.5, 2.0, 1.8, 2.3, 2.4])
+    with ap1:
+        cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
+    with ap2:
+        default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
+        cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
+    with ap3:
+        waste_pct = st.number_input("Wastage %", min_value=0.0, max_value=30.0, value=float(st.session_state.saved_waste), step=1.0, format="%.1f")
+        if waste_pct != st.session_state.saved_waste:
+            st.session_state.saved_waste = waste_pct
+            st.query_params["waste"] = f"{waste_pct:.1f}"
+    with ap4:
+        bobbin_cone_capacity = st.number_input("Bobbin Cone (m)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
+        st.session_state.bobbin_cone_cap = bobbin_cone_capacity
+    with ap5:
+        bobbin_color = st.selectbox("Bobbin Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
+        st.session_state.bobbin_color = bobbin_color
 
 # Parse Uploaded Files
 if uploaded_files:
@@ -1202,7 +990,7 @@ if uploaded_files:
             st.session_state.suit_design_name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', raw_nm).strip() or raw_nm.strip()
 
         # Feature 1: Auto-detect machine heads from file name if present
-        h_match = re.search(r'\b(20|24|28|30|32|36|40|44|48|56)\s*(?:head|heads|h)\b', fname, re.I)
+        h_match = re.search(r'(20|24|28|30|32|36|40|44|48|56)\s*(?:head|heads|h)', fname, re.I)
         if h_match and not st.session_state.get("_user_set_heads"):
             auto_heads_val = int(h_match.group(1))
             if auto_heads_val != st.session_state.saved_heads:
@@ -1232,14 +1020,17 @@ if uploaded_files:
                 except Exception as e:
                     st.error(f"Image Error in {fname}: {e}")
 
-# Empty State
+# Empty State (When no files uploaded)
 if not st.session_state.parts:
     st.markdown("""
     <div style="background:var(--bg-surface); border:2px dashed var(--border-main); border-radius:12px; padding:32px 20px; text-align:center; color:var(--text-secondary); margin:12px 0; box-shadow:var(--card-shadow);">
         <div style="font-size:2.8rem; margin-bottom:10px;">📁</div>
-        <div style="font-weight:800; font-size:1.15rem; color:var(--text-primary); margin-bottom:6px;">Abhi koi Worksheet Upload Nahi Hui</div>
-        <div style="font-size:0.88rem; max-width:540px; margin:0 auto; line-height:1.6; margin-bottom:16px;">
-            Upar apni Wilcom PDF production worksheet upload karein, ya foran check karne k liye upar <strong>'✨ Sample Suit Load Karein (Demo)'</strong> button dabayein.
+        <div style="font-weight:800; font-size:1.15rem; color:var(--text-primary); margin-bottom:6px;">
+            Abhi Koi Wilcom Worksheet Upload Nahi Hui
+        </div>
+        <div style="font-size:0.86rem; max-width:520px; margin:0 auto; line-height:1.6; color:var(--text-secondary);">
+            Upar <strong>'Browse files'</strong> dabayein aur WhatsApp se aayi hui Wilcom PDF ya photo select karein.<br/>
+            <span style="font-size:0.78rem; color:var(--text-muted);">(Android mobile par WhatsApp files <strong>Recent</strong> ya <strong>Documents ➔ WhatsApp</strong> mein hoti hain)</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
