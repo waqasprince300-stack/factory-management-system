@@ -845,7 +845,7 @@ with col_hdr_theme:
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. FILE UPLOAD HERO SECTION (TOP PRIORITY ON MOBILE)
 # ═══════════════════════════════════════════════════════════════════════════
-c_up_box, c_up_btns = st.columns([7.4, 2.6])
+c_up_box, c_up_reset = st.columns([8.2, 1.8])
 
 with c_up_box:
     uploaded_files = st.file_uploader(
@@ -856,23 +856,18 @@ with c_up_box:
         label_visibility="collapsed"
     )
 
-with c_up_btns:
-    c_b1, c_b2 = st.columns([1.3, 1.0])
-    with c_b1:
-        st.markdown('<a href="whatsapp://send" target="_blank" class="wa-direct-btn" style="padding:9px 10px !important; font-size:0.82rem !important; height:38px; text-decoration:none !important;" title="WhatsApp Application Kholein">📲 WhatsApp</a>', unsafe_allow_html=True)
-    with c_b2:
-        if st.button("🗑️ Reset", key="clear_uploaded_btn", use_container_width=True, help="Tamam files aur calculations clear karein"):
-            st.session_state.parts = {}
-            st.session_state.suit_design_name = ""
-            st.session_state.custom_same_overrides = {}
-            st.session_state.uploader_key += 1
-            st.rerun()
+with c_up_reset:
+    if st.button("🗑️ Reset", key="clear_uploaded_btn", use_container_width=True, help="Tamam files aur calculations clear karein"):
+        st.session_state.parts = {}
+        st.session_state.suit_design_name = ""
+        st.session_state.custom_same_overrides = {}
+        st.session_state.uploader_key += 1
+        st.rerun()
 
-# WhatsApp Mobile Helper Guide Banner
+# Quick Mobile Helper Guide
 st.markdown("""
 <div style="background:var(--bg-surface-elevated); border:1px solid var(--border-main); border-left:3.5px solid var(--accent-amber); border-radius:8px; padding:8px 12px; margin-bottom:12px; font-size:0.77rem; color:var(--text-secondary); line-height:1.45;">
-    💡 <strong>WhatsApp Mobile Guide:</strong> WhatsApp par aayi hui PDF <em>'Gallery'</em> mein show nahi hoti (kyun k PDF document hota hai, image nahi).<br/>
-    WhatsApp mein file par tap kar k download karein ➔ Phir yahan <strong>'Browse files'</strong> dabayein ➔ Android k <strong>'Recent'</strong> ya <strong>'Documents ➔ WhatsApp'</strong> se select karein.
+    💡 <strong>WhatsApp Mobile Tip:</strong> WhatsApp par PDF tap kar k download karein ➔ Phir yahan <strong>'Browse files'</strong> dabayein aur Android k <strong>'Recent'</strong> tab se 1-tap mein select karein.
 </div>
 """, unsafe_allow_html=True)
 
