@@ -75,7 +75,7 @@ st.set_page_config(
 # SESSION STATE & THEME PERSISTENCE
 # ═══════════════════════════════════════════════════════════════════════════
 url_theme = st.query_params.get("theme", "").strip().lower()
-persisted_theme = "Light" if url_theme == "light" else "Dark"
+persisted_theme = "Dark" if url_theme == "dark" else "Light"
 
 if "theme_mode" not in st.session_state:
     st.session_state.theme_mode = persisted_theme
@@ -525,66 +525,170 @@ div[data-testid="stNumberInputStepUp"]:hover {{
 div[data-testid="stNumberInput"] button svg {{
     fill: var(--text-primary) !important;
 }}
+div[data-testid="stNumberInput"] button:hover svg {{
+    fill: var(--accent-amber) !important;
+}}
 
-/* BaseWeb Selectbox & Dropdown Menus */
+/* Modern Streamlit 1.64 React-Aria & BaseWeb Selectbox */
+.stApp div[data-testid="stSelectbox"] > div:has(input),
+.stApp div[data-testid="stSelectbox"] div[role="group"],
+.stApp div[data-testid="stSelectbox"] .react-aria-Group,
+.stApp div[data-testid="stSelectbox"] [class*="e1fp86qc0"],
+.stApp div[data-testid="stSelectbox"] > div:last-child,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"],
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div,
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
-.stApp [data-testid="stSelectbox"] div[role="combobox"],
 .stApp [data-baseweb="select"],
-.stApp [data-baseweb="select"] > div,
-.stApp [data-baseweb="select"] div,
-.stApp [data-baseweb="select"] [role="combobox"] {{
+.stApp [data-baseweb="select"] > div {{
     background-color: var(--input-bg) !important;
-    border-color: var(--input-border) !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: 7px !important;
     color: var(--text-primary) !important;
+    box-shadow: none !important;
+    min-height: 38px !important;
 }}
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] div:not(:first-child),
-.stApp [data-baseweb="select"] div:not(:first-child) {{
-    background-color: transparent !important;
-}}
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div:hover,
+
+.stApp div[data-testid="stSelectbox"] div[role="group"]:hover,
+.stApp div[data-testid="stSelectbox"] div[role="group"][data-hovered],
+.stApp div[data-testid="stSelectbox"] .react-aria-Group:hover,
+.stApp div[data-testid="stSelectbox"] [data-baseweb="select"] > div:hover,
 .stApp [data-baseweb="select"] > div:hover {{
     border-color: var(--border-focus) !important;
+    background-color: var(--input-bg) !important;
 }}
+
+.stApp div[data-testid="stSelectbox"] div[role="group"]:focus-within,
+.stApp div[data-testid="stSelectbox"] div[role="group"][data-focus-within],
+.stApp div[data-testid="stSelectbox"] .react-aria-Group:focus-within {{
+    border-color: var(--border-focus) !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
+}}
+
+/* Text input inside the selectbox */
+.stApp [data-testid="stSelectbox"] input,
+.stApp [data-testid="stSelectbox"] input[type="text"],
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] span,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] div,
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input,
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] p,
 .stApp [data-baseweb="select"] span,
 .stApp [data-baseweb="select"] div,
-.stApp [data-baseweb="select"] input,
 .stApp [data-baseweb="select"] p {{
+    background-color: transparent !important;
     color: var(--text-primary) !important;
     font-family: 'JetBrains Mono', monospace !important;
-    font-size: 0.85rem !important;
+    font-size: 0.88rem !important;
     font-weight: 700 !important;
+    opacity: 1 !important;
 }}
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] svg,
+
+/* Arrow button and icons */
+.stApp [data-testid="stSelectbox"] button,
+.stApp [data-testid="stSelectbox"] svg,
 .stApp [data-baseweb="select"] svg {{
     fill: var(--text-primary) !important;
     color: var(--text-primary) !important;
+    background: transparent !important;
 }}
+
+/* Dropdown Popup Menu (Virtual Dropdown) */
+div[data-testid="stSelectboxVirtualDropdown"],
+div[data-testid="stSelectboxVirtualDropdown"] > div,
 div[data-baseweb="popover"],
 div[data-baseweb="popover"] > div,
-ul[role="listbox"] {{
+ul[role="listbox"],
+div[role="listbox"] {{
     background-color: var(--bg-surface-elevated) !important;
     border: 1px solid var(--border-main) !important;
     border-radius: 8px !important;
     color: var(--text-primary) !important;
     box-shadow: var(--card-shadow) !important;
 }}
+
+/* Option Items in Dropdown */
+div[role="option"],
 li[role="option"] {{
     background-color: transparent !important;
     color: var(--text-primary) !important;
-    font-size: 0.84rem !important;
+    font-size: 0.85rem !important;
     font-weight: 600 !important;
     padding: 8px 12px !important;
 }}
+
+div[role="option"]:hover,
+div[role="option"][data-hovered],
+div[role="option"][aria-selected="true"],
 li[role="option"]:hover,
 li[role="option"][aria-selected="true"] {{
     background-color: var(--table-row-hover) !important;
     color: var(--accent-amber) !important;
+}}
+
+/* Modern Expander (Details & Summary) Styling */
+.stApp [data-testid="stExpander"],
+.stApp .stExpander {{
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-main) !important;
+    border-radius: 10px !important;
+    margin-bottom: 12px !important;
+    box-shadow: var(--card-shadow) !important;
+    overflow: hidden !important;
+}}
+
+.stApp [data-testid="stExpander"] details {{
+    border: none !important;
+    border-radius: 10px !important;
+    background-color: transparent !important;
+}}
+
+.stApp [data-testid="stExpander"] summary {{
+    background-color: var(--bg-surface-elevated) !important;
+    border: none !important;
+    border-radius: 9px !important;
+    padding: 10px 14px !important;
+    color: var(--text-primary) !important;
+    font-size: 0.86rem !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    align-items: center !important;
+}}
+
+.stApp [data-testid="stExpander"] summary:hover,
+.stApp [data-testid="stExpander"] summary:focus {{
+    background-color: var(--btn-hover-bg) !important;
+    border-color: var(--border-focus) !important;
+}}
+
+.stApp [data-testid="stExpander"] summary *,
+.stApp [data-testid="stExpander"] summary p,
+.stApp [data-testid="stExpander"] summary span,
+.stApp [data-testid="stExpander"] summary div {{
+    color: var(--text-primary) !important;
+    font-size: 0.86rem !important;
+    font-weight: 800 !important;
+}}
+
+.stApp [data-testid="stExpander"] summary:hover *,
+.stApp [data-testid="stExpander"] summary:hover p,
+.stApp [data-testid="stExpander"] summary:hover span {{
+    color: var(--accent-amber) !important;
+}}
+
+.stApp [data-testid="stExpander"] summary svg {{
+    fill: var(--text-primary) !important;
+    color: var(--text-primary) !important;
+}}
+
+.stApp [data-testid="stExpander"] summary:hover svg {{
+    fill: var(--accent-amber) !important;
+    color: var(--accent-amber) !important;
+}}
+
+.stApp [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+    background-color: var(--bg-surface) !important;
+    border-top: 1px solid var(--border-main) !important;
+    padding: 12px 14px !important;
+    color: var(--text-primary) !important;
 }}
 
 /* High-Contrast Widget Labels */
