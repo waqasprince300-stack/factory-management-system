@@ -66,10 +66,12 @@ def extract_repeat_from_text(text: str) -> float:
     if m:
         return parse_repeat_token(m.group(1))
 
-    # 3. Bracketed pattern: [7 R], (7 R), {7 R}, [Half R], [1.5 R], [0.5 R], (2 R)
-    m = re.search(r'[\[\(\{]\s*(\d+(?:\.\d+)?|\bhalf\b|\bdouble\b|\bquarter\b|1/2|1/4)\s*(?:-?\s*r[a-z]*|x|times)?\s*[\]\)\}]', t, re.I)
+    # 3. Bracketed pattern: [7 R], (7 R), {7 R}, [Half R], [1.5 R], [0.5 R], (2 R), [1R]
+    # Suffix is strictly required for digits so that color codes/IDs like (104), (288), (60) are not matched as repeats!
+    m = re.search(r'[\[\(\{]\s*(?:(\d+(?:\.\d+)?)\s*-?\s*(?:r[a-z]*|x|times|chakkar|chaker)\b|(\bhalf\b|\bdouble\b|\bquarter\b|1/2|1/4)(?:\s*-?\s*(?:r[a-z]*|x|times|chakkar|chaker)\b)?)\s*[\]\)\}]', t, re.I)
     if m:
-        return parse_repeat_token(m.group(1))
+        token = m.group(1) or m.group(2)
+        return parse_repeat_token(token)
 
     # 4. Unbracketed suffix: 7 R, 7-R, 7R, 1.5 R, 0.5 R, 7 Repeat, Half R, Double R
     m = re.search(r'\b(\d+(?:\.\d+)?|\bhalf\b|\bdouble\b|\bquarter\b|1/2|1/4)\s*(?:-?\s*(?:r|repeat|repeats|rpeat|rpeats|rept|times|chakkar|chaker)\b|x\b)', t, re.I)
@@ -227,17 +229,15 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
     # Detect if sheet is in feet
     sheet_is_feet = (thread_unit in ("ft", "feet")) or (bobbin_unit in ("ft", "feet"))
 
-    # Auto-detect Repeat from design name, filename, and full sheet text (e.g. "[7 R]", "(7 R)", "Half R", "2 R")
+    # Auto-detect Repeat from design name and filename (e.g. "[7 R]", "(7 R)", "Half R", "2 R")
+    # In Wilcom worksheets, repeat is only specified in design title or filename, never in metadata or stop tables
     target_name = f"{design_name or ''} {clean_name}"
     repeat = extract_repeat_from_text(target_name)
-    if repeat == 1.0 and full_text:
-        repeat = extract_repeat_from_text(full_text)
     attrs = extract_part_attributes(target_name, repeat, width_mm)
 
-    # Sequins Count
-    seq_hdr = next((w for w in words if w["text"] == "Sequins:" and w["x0"] > 380), None)
-    tu_hdr = next((w for w in words if w["text"] == "Thread" and w["x0"] > 380 and (not seq_hdr or w["top"] > seq_hdr["top"])), None)
-    n_sharp = next((w for w in words if w["text"] == "N#" and w["x0"] > 350), None)
+    # Sequins Count (finds Sequins: anywhere on page, multi-column safe)
+    seq_hdr = next((w for w in words if w["text"] == "Sequins:"), None)
+    tu_hdr = next((w for w in words if "thread" in w["text"].lower() and (not seq_hdr or w["top"] > seq_hdr["top"])), None)
 
     sequins_total = 0
     if seq_hdr:
@@ -269,91 +269,99 @@ def _extract_page_data(p, clean_name: str, page_idx: int = 0) -> dict:
                     except ValueError:
                         pass
 
-    # Thread Colors Table
+    # Thread Colors Table (Robust Multi-Column & Wrapped Layout Support)
+    # Strictly requires length unit (m|ft|yd) to prevent Stop Sequence numbers from being parsed as meters
+    len_pattern = re.compile(r'^([\d,]+(?:\.\d+)?)\s*(m|ft|yd)$', re.I)
     thread_colors = []
-    if n_sharp:
-        min_x = n_sharp["x0"] - 8
-        th_words = [w for w in words if w["x0"] >= min_x and w["top"] > n_sharp["top"] and w["top"] < 780]
-        th_lines = []
-        curr = []
-        for w in sorted(th_words, key=lambda x: (x["top"], x["x0"])):
-            if not curr or abs(w["top"] - curr[0]["top"]) < 6:
-                curr.append(w)
-            else:
-                th_lines.append(curr)
-                curr = [w]
-        if curr:
-            th_lines.append(curr)
+    seen_needles = set()
 
-        for line in th_lines:
-            txt = " ".join(w["text"] for w in line)
-            if "page" in txt.lower() or "printed" in txt.lower() or "author" in txt.lower():
+    for w in words:
+        m = len_pattern.match(w["text"])
+        if not m:
+            continue
+        raw_val_str = m.group(1).replace(",", "")
+        try:
+            length_val = float(raw_val_str)
+        except ValueError:
+            continue
+        unit = m.group(2).lower()
+
+        # Find words on the same line to the left within 145px (one column width)
+        line_left_words = [
+            lw for lw in words
+            if abs(lw["top"] - w["top"]) < 4.5
+            and (w["x0"] - 145) <= lw["x0"] < w["x0"]
+        ]
+        line_left_words.sort(key=lambda x: x["x0"])
+        left_text = " ".join(lw["text"] for lw in line_left_words)
+
+        # Skip headers / summary lines
+        if any(k in left_text.lower() for k in ["total thread", "thread usage", "total bobbin", "height", "width"]):
+            continue
+
+        # Match needle number and code (e.g. '6. 3156' or '4. 3074' or '11. 3242 #1 (5)' or '3. 3065')
+        row_match = re.search(r'(\d+)\.\s+([A-Za-z0-9_\-\#]+)(?:\s+(.*?))?$', left_text)
+        if row_match:
+            needle = int(row_match.group(1))
+            raw_code = row_match.group(2)
+            raw_name = (row_match.group(3) or "").strip()
+
+            if (needle, raw_code) in seen_needles:
                 continue
-            m = re.search(r'^\s*(\d+)\.\s+(\S+)\s*(.*?)\s+([\d,]+(?:\.\d+)?)\s*(m|ft|feet|yd|yards)?(?:\s|$)', txt, re.I)
+            seen_needles.add((needle, raw_code))
+
+            code, name, check_code = extract_dual_shade(raw_code, raw_name)
+
+            if unit in ("ft", "feet"):
+                length_m = length_val * FEET_TO_METERS
+            elif unit in ("yd", "yards"):
+                length_m = length_val * YARDS_TO_METERS
+            else:
+                length_m = length_val
+
+            item = {
+                "needle": needle,
+                "code": code,
+                "name": name if name else code,
+                "length_m": round(length_m, 2),
+                "raw_length": length_val,
+                "raw_unit": unit
+            }
+            if check_code:
+                item["check_code"] = check_code
+                item["original_code"] = raw_code
+            thread_colors.append(item)
+
+    # Fallback ONLY within the explicit "Thread usage" section of text (never scans Stop Sequence)
+    if not thread_colors and "thread usage" in full_text.lower():
+        tu_section = full_text.lower().split("thread usage", 1)[-1]
+        for footer in ["author", "page 1", "design last saved"]:
+            if footer in tu_section:
+                tu_section = tu_section.split(footer)[0]
+        for line_txt in tu_section.splitlines():
+            m = re.search(r'^\s*(\d+)\.\s+(\S+)\s*(.*?)\s+([\d,]+(?:\.\d+)?)\s*(m|ft|yd)', line_txt, re.I)
             if m:
                 needle = int(m.group(1))
                 raw_code = m.group(2).strip()
                 raw_name = m.group(3).strip()
                 raw_length = float(m.group(4).replace(",", ""))
-                unit = (m.group(5) or "").lower()
-
-                code, name, check_code = extract_dual_shade(raw_code, raw_name)
-
-                # Auto-convert ft/yd to meters
-                if unit in ("ft", "feet") or (not unit and sheet_is_feet):
-                    length_m = raw_length * FEET_TO_METERS
-                elif unit in ("yd", "yards"):
-                    length_m = raw_length * YARDS_TO_METERS
-                else:
-                    length_m = raw_length
-
-                tc_item = {
-                    "needle": needle,
-                    "code": code,
-                    "name": name if name else code,
-                    "length_m": round(length_m, 2),
-                    "raw_length": raw_length,
-                    "raw_unit": unit or ("ft" if sheet_is_feet else "m")
-                }
-                if check_code:
-                    tc_item["check_code"] = check_code
-                    tc_item["original_code"] = raw_code
-
-                thread_colors.append(tc_item)
-    else:
-        # Fallback text regex
-        for line_txt in full_text.splitlines():
-            m = re.search(r'^\s*(\d+)\.\s+(\S+)\s*(.*?)\s+([\d,]+(?:\.\d+)?)\s*(m|ft|feet|yd|yards)?(?:\s|$)', line_txt, re.I)
-            if m:
-                needle = int(m.group(1))
-                raw_code = m.group(2).strip()
-                raw_name = m.group(3).strip()
-                raw_length = float(m.group(4).replace(",", ""))
-                unit = (m.group(5) or "").lower()
-
-                code, name, check_code = extract_dual_shade(raw_code, raw_name)
-
-                # Auto-convert ft/yd to meters
-                if unit in ("ft", "feet") or (not unit and sheet_is_feet):
-                    length_m = raw_length * FEET_TO_METERS
-                elif unit in ("yd", "yards"):
-                    length_m = raw_length * YARDS_TO_METERS
-                else:
-                    length_m = raw_length
-
-                tc_item = {
-                    "needle": needle,
-                    "code": code,
-                    "name": name if name else code,
-                    "length_m": round(length_m, 2),
-                    "raw_length": raw_length,
-                    "raw_unit": unit or ("ft" if sheet_is_feet else "m")
-                }
-                if check_code:
-                    tc_item["check_code"] = check_code
-                    tc_item["original_code"] = raw_code
-
-                thread_colors.append(tc_item)
+                unit = m.group(5).lower()
+                length_m = raw_length * FEET_TO_METERS if unit == "ft" else (raw_length * YARDS_TO_METERS if unit == "yd" else raw_length)
+                if (needle, raw_code) not in seen_needles:
+                    seen_needles.add((needle, raw_code))
+                    code, name, check_code = extract_dual_shade(raw_code, raw_name)
+                    item = {
+                        "needle": needle,
+                        "code": code,
+                        "name": name if name else code,
+                        "length_m": round(length_m, 2),
+                        "raw_length": raw_length,
+                        "raw_unit": unit
+                    }
+                    if check_code:
+                        item["check_code"] = check_code
+                        item["original_code"] = raw_code
+                    thread_colors.append(item)
 
     if total_thread_m == 0.0 and thread_colors:
         total_thread_m = round(sum(tc["length_m"] for tc in thread_colors), 2)
@@ -410,6 +418,12 @@ def parse_wilcom_pdf(file_bytes: bytes, filename: str) -> list[dict]:
                 elif pdata["design_name"] and pdata["design_name"] != current_part["design_name"]:
                     is_new_part = True
                 elif pdata["stitches"] != current_part["stitches"]:
+                    is_new_part = True
+                elif (pdata.get("height_mm", 0) > 0 and current_part.get("height_mm", 0) > 0 and
+                      abs(pdata["height_mm"] - current_part["height_mm"]) > 2.0):
+                    is_new_part = True
+                elif (pdata.get("width_mm", 0) > 0 and current_part.get("width_mm", 0) > 0 and
+                      abs(pdata["width_mm"] - current_part["width_mm"]) > 2.0):
                     is_new_part = True
 
             if is_new_part:

@@ -34,19 +34,20 @@ from core.parser import extract_dual_shade
 def is_same_color(code: str, name: str) -> bool:
     """
     Identifies if a thread color is tone-on-tone / base matching.
-    Matches: 'same', 'same up', 'same lite', 'same light', 'same dark', 'matching', 'base', 'tone'.
+    Matches: 'same', 'sane', 'same up', 'same lite', 'same light', 'same dark', 'matching', 'base', 'tone'.
     """
     text = f"{code} {name}".lower()
-    pattern = r'\b(same|same\s*up|same\s*lite|same\s*light|same\s*dark|same\s*\d+|matching|base\s*match|tone)\b'
+    pattern = r'\b(same|sane|same\s*up|same\s*lite|same\s*light|same\s*dark|same\s*\d+|matching|base\s*match|tone)\b'
     return bool(re.search(pattern, text, re.I))
 
 
 def is_boring_tool(code: str, name: str) -> bool:
     """
     Identifies if a needle is a boring knife rather than thread.
+    Matches: 'bor', 'boring', 'borer', 'churi', 'knife', 'eyelet', 'punch', 'cutter'.
     """
     text = f"{code} {name}".lower()
-    return bool(re.search(r'\b(boring|borer|churi|knife|eyelet|punch)\b', text, re.I))
+    return bool(re.search(r'\b(bor|boring|borer|churi|chori|knife|eyelet|punch|cutter)\b', text, re.I))
 
 
 def get_part_mode_options(machine_heads: int = DEFAULT_MACHINE_HEADS, base_colors: int = 6) -> dict:
@@ -251,20 +252,34 @@ def aggregate_suit_parts(
             name_upper = norm_name.upper()
 
             target_key = None
+            has_valid_code = bool(code_upper and code_upper not in ("-", "NONE", "N/A", "NULL", ""))
+
             for ex_k, ex_info in colors_dict.items():
                 ex_code_upper = ex_info["code"].strip().upper()
                 ex_name_upper = ex_info["name"].strip().upper()
                 ex_needle = ex_info["needle"]
+                ex_has_valid_code = bool(ex_code_upper and ex_code_upper not in ("-", "NONE", "N/A", "NULL", ""))
 
-                if code_upper and code_upper not in ("-", "NONE", "N/A", "NULL") and code_upper == ex_code_upper:
+                # Rule 1: If both have valid shade codes, merge ONLY if code matches exactly
+                if has_valid_code and ex_has_valid_code:
+                    if code_upper == ex_code_upper:
+                        target_key = ex_k
+                        break
+                    else:
+                        # Distinct shade codes (e.g. 3019 vs 3020) must NEVER merge!
+                        continue
+
+                # Rule 2: If one or both lack a valid code, merge by non-generic shade name if needle matches
+                GENERIC_NAMES = {"CD", "COLOR", "THREAD", "NONE", "N/A", "-", "", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+                if name_upper and name_upper not in GENERIC_NAMES and name_upper == ex_name_upper:
                     target_key = ex_k
                     break
 
-                if needle == ex_needle and name_upper == ex_name_upper:
+                # Rule 3: Cross code-to-name match
+                if has_valid_code and not ex_has_valid_code and code_upper == ex_name_upper:
                     target_key = ex_k
                     break
-
-                if needle == ex_needle and (code_upper == ex_name_upper or name_upper == ex_code_upper):
+                if not has_valid_code and ex_has_valid_code and name_upper == ex_code_upper:
                     target_key = ex_k
                     break
 
@@ -326,7 +341,8 @@ def calculate_full_production(
     pitch_mm: float = DEFAULT_HEAD_PITCH_MM,
     bukram_roll_meters: float = DEFAULT_BUKRAM_ROLL_METERS,
     bukram_price_per_roll: float = DEFAULT_BUKRAM_ROLL_PRICE,
-    other_cost_per_suit: float = 40.0
+    other_cost_per_suit: float = 40.0,
+    bobbin_cone_capacity_val: float = 10000.0
 ) -> dict:
     cone_cap_m = cone_capacity_val if "meter" in cone_unit.lower() else (cone_capacity_val * YARDS_TO_METERS)
     waste_mult = 1.0 + (waste_pct / 100.0)
@@ -424,9 +440,10 @@ def calculate_full_production(
             p_rep = float(cfg["repeat"])
             c_in_rep = max(1, cfg.get("colors_in_rep", 1))
 
-            pieces_per_lot_calc = max(1, def_h * b_count)
-            lots_calc = num_pieces / float(pieces_per_lot_calc)
-            p_runs = max(1, int(round(p_rep * (b_count / float(c_in_rep)) * lots_calc))) if p_rep > 0 else 0
+            part_heads = max(1, int(cfg.get("heads", def_h)))
+            pieces_per_frame = part_heads * c_in_rep
+            total_part_pieces_needed = num_pieces * p_rep
+            p_runs = max(1, int(math.ceil(total_part_pieces_needed / float(pieces_per_frame)))) if p_rep > 0 else 0
             p_runs_clr = round(p_runs / float(b_count), 1) if b_count > 0 else p_runs
 
             p_st_suit = int(round(p_st * cfg["rate_st_mult"]))
@@ -476,7 +493,8 @@ def calculate_full_production(
     if order_bobbin_m <= 0 and grand_stitches > 0:
         # Standard factory estimate: ~3.5 meters bobbin per 1,000 stitches
         order_bobbin_m = (grand_stitches / 1000.0) * 3.5 * waste_mult
-    bobbin_cones = math.ceil(order_bobbin_m / 10000.0) if order_bobbin_m > 0 else 0
+    b_cap = max(100.0, float(bobbin_cone_capacity_val))
+    bobbin_cones = math.ceil(order_bobbin_m / b_cap) if order_bobbin_m > 0 else 0
     bobbin_cost_order = bobbin_cones * 320.0
     bobbin_cost_suit = round(bobbin_cost_order / max(1, num_pieces), 2)
 
@@ -493,7 +511,7 @@ def calculate_full_production(
             tooling = "Resham (Viscose)"
             if any(w in f"{code_str} {desc_str}".lower() for w in ["tilla", "sona", "chandi", "zari", "gold"]):
                 tooling = "Tilla (Metallic)"
-            elif any(w in f"{code_str} {desc_str}".lower() for w in ["boring", "churi", "knife"]):
+            elif any(w in f"{code_str} {desc_str}".lower() for w in ["bor", "boring", "churi", "knife"]):
                 tooling = "Boring Knife"
             elif any(w in f"{code_str} {desc_str}".lower() for w in ["sitara", "sequin"]):
                 tooling = "Sitara (Sequin)"
@@ -512,12 +530,46 @@ def calculate_full_production(
                 "m_1_suit": row.get("1 Suit (m)", 0.0)
             })
 
+    # Include any boring knife needles in operator needle setup card (with 0 thread cones)
+    if parts:
+        for p in parts.values():
+            for tc in p.get("thread_colors", []):
+                rc = str(tc.get("code", "")).strip()
+                rn = str(tc.get("name", "")).strip() or rc
+                n = int(tc.get("needle", 1))
+                if is_boring_tool(rc, rn) and n not in seen_needles:
+                    seen_needles.add(n)
+                    needle_bar_map.append({
+                        "needle": n,
+                        "code": rc,
+                        "name": rn,
+                        "check_code": None,
+                        "category": "🔪 Boring Knife",
+                        "tooling": "Boring Knife",
+                        "is_same": False,
+                        "cones": 0,
+                        "m_1_suit": 0.0
+                    })
+
+    needle_bar_map.sort(key=lambda x: x["needle"])
+
     # 4. Real Factory Timing (Factoring Color Changes & Takaai/Frame Changes)
     num_color_changes = max(1, len(needle_bar_map))
     real_spm = float(machine_rpm) if (machine_rpm is not None and float(machine_rpm) > 0) else float(DEFAULT_REAL_RPM)
-    stitching_mins_total = (total_suit_stitches / real_spm) * total_runs if real_spm > 0 else 0
+    
+    # Pure stitching minutes: exact sum of each part's stitching time across its actual runs
+    if parts:
+        stitching_mins_total = sum(
+            ((float(p.get("stitches", 0)) / real_spm) * part_runs_details[h]["runs"])
+            for h, p in parts.items()
+            if h in part_runs_details
+        ) if real_spm > 0 else 0.0
+    else:
+        stitching_mins_total = (total_suit_stitches / real_spm) * total_runs if real_spm > 0 else 0.0
+
     color_change_loss_mins = (num_color_changes * DEFAULT_COLOR_CHANGE_SECONDS / 60.0) * total_runs
     frame_change_loss_mins = DEFAULT_FRAME_CHANGE_MINUTES * total_runs
+    pure_stitch_hours = round(stitching_mins_total / 60.0, 1)
     real_total_hours = round((stitching_mins_total + color_change_loss_mins + frame_change_loss_mins) / 60.0, 1)
     real_shifts = max(1, int(math.ceil(real_total_hours / shift_hours)))
     real_days = round(real_shifts / 2.0, 1)
@@ -546,6 +598,12 @@ def calculate_full_production(
         "total_runs": total_runs,
         "shifts_needed": shifts_needed,
         "days_needed": days_needed,
+        "pure_stitch_hours": pure_stitch_hours,
+        "real_total_hours": real_total_hours,
+        "real_shifts": real_shifts,
+        "real_days": real_days,
+        "color_change_loss_mins": color_change_loss_mins,
+        "frame_change_loss_mins": frame_change_loss_mins,
         "part_runs_details": part_runs_details,
         "piece_rate": piece_rate,
         "total_order_amount": total_order_amount,

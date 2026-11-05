@@ -83,8 +83,8 @@ def run_tests(custom_pdf_path=None):
     print(f"  📊 Size: {len(result['pdf_bytes']):,} bytes")
 
     assert len(result["pdf_bytes"]) > 1000, "PDF bytes too small!"
-    assert "THREADWORKS" in result["text_reply"], "Header missing in reply!"
-    assert "STORE REQUISITION" in result["text_reply"], "Store section missing!"
+    assert "DHAAGA ORDER" in result["text_reply"], "Header missing in reply!"
+    assert "Kul Dhaaga Cones" in result["text_reply"], "Total cones missing in reply!"
 
     print("\n" + "=" * 65)
     print("✅ TEST 100% KAMYAB! Bot bilkul theek chal raha hai.")

@@ -541,11 +541,10 @@ div[data-testid="stNumberInput"] button:hover svg {{
 /* Modern Streamlit 1.64 React-Aria & BaseWeb Selectbox */
 .stApp div[data-testid="stSelectbox"] [class*="e1fp86qc0"],
 .stApp div[data-testid="stSelectbox"] .react-aria-Group,
-.stApp div[data-testid="stSelectbox"] div[data-hovered],
-.stApp div[data-testid="stSelectbox"] div:not([data-hovered]),
 .stApp div[data-testid="stSelectbox"] [data-baseweb="select"],
 .stApp div[data-testid="stSelectbox"] [data-baseweb="select"] > div,
-.stApp div[data-testid="stSelectbox"] > div:last-child {{
+.stApp div[data-testid="stSelectbox"] > div:has(input),
+.stApp div[data-testid="stSelectbox"] > div:last-child:not([data-testid="stWidgetLabel"]) {{
     background-color: var(--input-bg) !important;
     border: 1px solid var(--input-border) !important;
     border-radius: 7px !important;
@@ -712,7 +711,21 @@ li[role="option"][aria-selected="true"],
     color: var(--text-primary) !important;
 }}
 
-/* High-Contrast Crisp Widget Labels */
+/* High-Contrast Crisp Widget Labels - Strictly Borderless */
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] *,
+.stApp div[data-testid="stSelectbox"] [data-testid="stWidgetLabel"],
+.stApp div[data-testid="stSelectbox"] [data-testid="stWidgetLabel"] *,
+.stApp div[data-testid="stNumberInput"] [data-testid="stWidgetLabel"],
+.stApp div[data-testid="stNumberInput"] [data-testid="stWidgetLabel"] * {{
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    min-height: auto !important;
+    height: auto !important;
+    padding: 0 !important;
+}}
 .stApp [data-testid="stWidgetLabel"] {{
     margin-bottom: 4px !important;
 }}
@@ -846,6 +859,14 @@ div[data-testid="stDownloadButton"] > button:hover {{
 .stApp div[class*="e1dmul8p3"]:hover,
 .stApp div[data-testid="stFileUploaderFile"]:hover {{
     border-color: var(--border-focus) !important;
+}}
+
+.stApp [data-testid="stFileUploaderFile"] div,
+.stApp [data-testid="stFileUploaderFileData"],
+.stApp [data-testid="stFileUploaderFile"] span,
+.stApp [data-testid="stFileUploaderFile"] small,
+.stApp [data-testid="stFileUploaderFile"] p {{
+    background-color: transparent !important;
 }}
 
 .stApp .stFileChip *,
@@ -1099,8 +1120,7 @@ with sp1:
         min_value=1,
         max_value=120,
         value=int(st.session_state.saved_heads),
-        step=1,
-        help="Machine Heads (Default: 30 / 28 Heads)"
+        step=1
     )
     if machine_heads != st.session_state.saved_heads:
         st.session_state.saved_heads = machine_heads
@@ -1113,8 +1133,7 @@ with sp2:
         min_value=1,
         max_value=30,
         value=int(st.session_state.saved_shades),
-        step=1,
-        help="Base cloth colors per lot (Default: 6 Colors)"
+        step=1
     )
     if base_colors_count != st.session_state.saved_shades:
         st.session_state.saved_shades = base_colors_count
@@ -1157,8 +1176,7 @@ with sp4:
         max_value=10.0,
         value=float(st.session_state.saved_rate),
         step=0.05,
-        format="%.2f",
-        help="Rate per 1,000 stitches in PKR"
+        format="%.2f"
     )
     if stitch_rate != st.session_state.saved_rate:
         st.session_state.saved_rate = stitch_rate
@@ -1166,26 +1184,32 @@ with sp4:
 
 # Collapsed Quick Mode Advance Options (Cone Size, Wastage, Speed, Bobbin)
 with st.expander("⚙️ Advance Settings (Cone Size, Wastage %, Speed SPM, Bobbin Khicha)", expanded=False):
-    ap1, ap2, ap3, ap4, ap5, ap6 = st.columns([1.4, 1.8, 1.5, 1.7, 2.0, 2.2], gap="medium")
-    with ap1:
+    # Row 1: Thread & Cone Settings
+    r1_c1, r1_c2, r1_c3 = st.columns([1.2, 1.5, 1.3], gap="medium")
+    with r1_c1:
         cone_unit = st.selectbox("Cone Unit", ["Meters", "Yards"], index=0)
-    with ap2:
+    with r1_c2:
         default_cap = DEFAULT_CONE_CAPACITY_METERS if "Meters" in cone_unit else DEFAULT_CONE_CAPACITY_YARDS
         cone_capacity_val = st.number_input("Cone Size", min_value=100.0, max_value=50000.0, value=float(default_cap), step=100.0)
-    with ap3:
+    with r1_c3:
         waste_pct = st.number_input("Wastage %", min_value=0.0, max_value=30.0, value=float(st.session_state.saved_waste), step=1.0, format="%.1f")
         if waste_pct != st.session_state.saved_waste:
             st.session_state.saved_waste = waste_pct
             st.query_params["waste"] = f"{waste_pct:.1f}"
-    with ap4:
-        machine_spm = st.number_input("Speed (SPM)", min_value=200, max_value=1500, value=int(st.session_state.saved_speed), step=20, help="Floor Running Speed (Stitches Per Minute) - Default: 680 SPM")
+
+    st.markdown('<div style="height: 4px;"></div>', unsafe_allow_html=True)
+
+    # Row 2: Machine Floor Speed & Bobbin Thread
+    r2_c1, r2_c2, r2_c3 = st.columns([1.2, 1.5, 1.3], gap="medium")
+    with r2_c1:
+        machine_spm = st.number_input("Speed (SPM)", min_value=200, max_value=1500, value=int(st.session_state.saved_speed), step=20)
         if machine_spm != st.session_state.saved_speed:
             st.session_state.saved_speed = machine_spm
             st.query_params["speed"] = str(machine_spm)
-    with ap5:
+    with r2_c2:
         bobbin_cone_capacity = st.number_input("Bobbin Cone (m)", min_value=1000.0, max_value=50000.0, value=float(st.session_state.bobbin_cone_cap), step=1000.0)
         st.session_state.bobbin_cone_cap = bobbin_cone_capacity
-    with ap6:
+    with r2_c3:
         bobbin_color = st.selectbox("Bobbin Color", ["White (Sufaid)", "Black (Kala)", "White + Black"], index=0)
         st.session_state.bobbin_color = bobbin_color
 
@@ -1475,7 +1499,8 @@ results = calculate_full_production(
     cone_price=DEFAULT_CONE_PRICE,
     machine_rpm=machine_spm,
     shift_hours=DEFAULT_SHIFT_HOURS,
-    parts=st.session_state.parts
+    parts=st.session_state.parts,
+    bobbin_cone_capacity_val=float(st.session_state.get("bobbin_cone_cap", 10000.0))
 )
 
 cone_rows = results["cone_rows"]
@@ -1742,20 +1767,16 @@ with tab_store:
         table_html += """</tbody></table></div>"""
         st.markdown(table_html, unsafe_allow_html=True)
 
-        # WhatsApp summary text generation (including Bobbin & Bukram)
-        store_summary_text = f"🧵 *DHAAGA & STORE ORDER — {raw_design_name}*\n"
-        store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots) | *{machine_heads} Heads* | *{base_colors_count} Shades*\n"
-        store_summary_text += f"⚡ Stitches: *{total_suit_stitches:,}*\n"
+        # WhatsApp simple dhaaga order text (Sirf Dhaaga & Cones)
+        store_summary_text = f"🧵 *DHAAGA ORDER — {raw_design_name}*\n"
+        store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots)\n"
         store_summary_text += "────────────────────────\n"
         for _, r in df_cones.iterrows():
             store_summary_text += f"{format_whatsapp_row(r)}\n"
         store_summary_text += "────────────────────────\n"
-        store_summary_text += f"🧵 *Kul Dhaaga Cones:* {total_order_cones} Cones\n"
+        store_summary_text += f"🧵 *Kul Dhaaga Cones:* *{total_order_cones} Cones*\n"
         if bobbin_cones > 0:
-            store_summary_text += f"🧵 *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones* (~{bobbin_kg:.2f} kg / {total_order_bobbin_m:,.0f}m)\n"
-        if bukram_rolls_int > 0:
-            store_summary_text += f"📜 *Bukram/Paper*: *{bukram_rolls_int} Rolls* (~{total_bukram_m:,.0f}m / Frame: {frame_length_m:.1f}m)\n"
-        store_summary_text += f"🔄 *Machine Repeats:* {total_runs} R | ⏱️ *Takhmeena Time:* ~{real_shifts} Shifts (~{real_days} Din @ {machine_spm} SPM)"
+            store_summary_text += f"🧵 *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones* (~{bobbin_kg:.1f} kg)"
 
         wa_encoded = urllib.parse.quote(store_summary_text)
         wa_direct_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
@@ -1865,7 +1886,7 @@ with tab_floor:
     st.markdown(needle_table_html, unsafe_allow_html=True)
 
         # 2. Real Floor Timing & Downtime
-    pure_stitch_hours = ((total_suit_stitches / machine_spm) * total_runs / 60.0) if machine_spm > 0 else 0
+    pure_stitch_hours = float(results.get("pure_stitch_hours", ((total_suit_stitches / machine_spm) * total_runs / 60.0) if machine_spm > 0 else 0))
     col_rt1, col_rt2 = st.columns([1.1, 0.9])
     with col_rt1:
         st.markdown(f"""<div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:9px; padding:14px; box-shadow:var(--card-shadow); margin-bottom:12px;">

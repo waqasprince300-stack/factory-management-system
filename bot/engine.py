@@ -235,26 +235,19 @@ def process_whatsapp_pdf(pdf_bytes: bytes, filename: str, overrides: dict = None
         bukram_data=bukram_dict
     )
 
-    # 8. Build WhatsApp Formatted Message (Dhaaga & Store details only, no financial rate/profit)
-    msg = f"🧵 *THREADWORKS • EMBROIDERY BOT*\n"
-    msg += f"📋 *Design:* {clean_dn}\n"
-    msg += f"📦 *Order:* *{num_pieces} Suits* ({lots_val:g} Lot) | *{heads_val} Heads* | *{base_shades_val} Shades*\n"
+    # 8. Build WhatsApp Formatted Message (Sirf Dhaaga & Cones)
+    msg = f"🧵 *DHAAGA ORDER — {clean_dn}*\n"
+    msg += f"📦 *Order:* *{num_pieces} Suits* ({lots_val:g} Lot)\n"
     msg += f"─────────────────────────\n"
-    msg += f"⚡ *Kul Stitches:* *{total_suit_stitches:,} st*\n"
-    msg += f"─────────────────────────\n"
-    msg += f"🧵 *STORE REQUISITION (DHAAGA & MATERIAL):*\n"
     if not df_cones.empty:
         for _, r in df_cones.iterrows():
             msg += f"{format_whatsapp_row(r)}\n"
+    msg += f"─────────────────────────\n"
+    msg += f"🧵 *Kul Dhaaga Cones:* *{total_order_cones} Cones*\n"
     if bobbin_cones > 0:
-        msg += f"• *Bobbin/Khicha (White):* *{bobbin_cones} Cones* (~{bobbin_kg:.2f} kg)\n"
-    if bukram_rolls_int > 0:
-        msg += f"• *Bukram/Paper:* *{bukram_rolls_int} Rolls* (~{total_bukram_m:,.0f}m / Frame: {frame_length_m:.1f}m)\n"
-    msg += f"🔄 *Machine Repeats:* *{total_runs} Repeat*\n"
+        msg += f"🧵 *Bobbin/Khicha (White):* *{bobbin_cones} Cones* (~{bobbin_kg:.1f} kg)\n"
     msg += f"─────────────────────────\n"
-    msg += f"⏱️ *FLOOR TIMING:* ~*{real_shifts} Shifts* (~{real_days} Din)\n"
-    msg += f"─────────────────────────\n"
-    msg += f"🖨️ *Printable A4 Job Card PDF neechay attach hai.*"
+    msg += f"🖨️ *Mukammal Job Card PDF neechay attach hai.*"
 
     return {
         "design_name": clean_dn,
