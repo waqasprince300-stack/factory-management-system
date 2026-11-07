@@ -46,24 +46,24 @@ def format_whatsapp_row(r) -> str:
             k_cones = r[col]
             break
 
+    # Clean description from redundant "(Check: ...)" if present
     desc_clean = re.sub(r'\(Check:[^\)]+\)', '', desc).strip()
 
-    if not desc_clean or desc_clean.lower() == code.lower():
-        name_str = f"*{code}*"
+    if not desc_clean or desc_clean.lower() == code.lower() or desc_clean.lower() in ("none", "n/a", "-"):
+        label = code
     elif code.lower() in desc_clean.lower():
-        name_str = f"*{desc_clean}*"
+        label = desc_clean
     else:
-        name_str = f"*{code}* {desc_clean}"
+        label = f"{code} ({desc_clean})" if desc_clean else code
 
-    if chk and f"Check: {chk}" not in name_str:
-        name_str += f" (Check: {chk})"
+    chk_suffix = f" (Check: {chk})" if chk else ""
 
     if is_same:
         m_per = re.search(r'(\d+)\s*Cones', str(r.get("Per Color Cones", "")))
         per_note = f" ({m_per.group(1)}/color)" if m_per else ""
-        return f"• {name_str} [Same]: *{k_cones} Cones*{per_note}"
+        return f"• *{label}:* {k_cones} Cones{per_note}{chk_suffix}"
     else:
-        return f"• {name_str}: *{k_cones} Cones*"
+        return f"• *{label}:* {k_cones} Cones{chk_suffix}"
 
 
 def process_whatsapp_pdf(pdf_bytes: bytes, filename: str, overrides: dict = None) -> dict:
@@ -235,17 +235,16 @@ def process_whatsapp_pdf(pdf_bytes: bytes, filename: str, overrides: dict = None
         bukram_data=bukram_dict
     )
 
-    # 8. Build WhatsApp Formatted Message (Sirf Dhaaga & Cones)
+    # 8. Build WhatsApp Formatted Message (Sirf Dhaaga & Cones - Simple & Lite)
+    lot_txt = f"({lots_val:g} Lots)" if lots_val > 1 else "(1 Lot)"
     msg = f"🧵 *DHAAGA ORDER — {clean_dn}*\n"
-    msg += f"📦 *Order:* *{num_pieces} Suits* ({lots_val:g} Lot)\n"
-    msg += f"─────────────────────────\n"
+    msg += f"Order: *{num_pieces} Suits* {lot_txt}\n\n"
     if not df_cones.empty:
         for _, r in df_cones.iterrows():
             msg += f"{format_whatsapp_row(r)}\n"
-    msg += f"─────────────────────────\n"
-    msg += f"🧵 *Kul Dhaaga Cones:* *{total_order_cones} Cones*\n"
+    msg += f"\n*Total Dhaaga:* *{total_order_cones} Cones*\n"
     if bobbin_cones > 0:
-        msg += f"🧵 *Bobbin/Khicha (White):* *{bobbin_cones} Cones* (~{bobbin_kg:.1f} kg)\n"
+        msg += f"*Bobbin:* *{bobbin_cones} Cones* (White)\n"
     msg += f"─────────────────────────\n"
     msg += f"🖨️ *Mukammal Job Card PDF neechay attach hai.*"
 

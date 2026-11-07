@@ -161,6 +161,40 @@ def extract_dual_shade(raw_code: str, raw_name: str) -> tuple[str, str, str | No
 
         return main_c, final_name, check_c
 
+    # Tone-on-tone Matching Variants Normalization (e.g. 'Same' code with 'Dark', 'Up', 'Lite', 'Seq')
+    # Preserves independent color identity across Wilcom worksheets (prevents collapsing 'Same Dark' into 'Same')
+    if raw_c.lower() in ("same", "sane"):
+        sub_m = re.search(r'\b(dark|drk|up|lite|light|lt|down|dn|dull|bright|seq|sequins|sitara|tilla|\d+)\b', raw_n, re.I)
+        if sub_m and sub_m.group(1).lower() not in ("same", "sane"):
+            sub_raw = sub_m.group(1).lower()
+            if sub_raw in ("dark", "drk"):
+                sub_tag = "Dark"
+            elif sub_raw in ("lite", "light", "lt"):
+                sub_tag = "Lite"
+            elif sub_raw in ("down", "dn"):
+                sub_tag = "Down"
+            elif sub_raw in ("seq", "sequins", "sitara"):
+                sub_tag = "Seq"
+            else:
+                sub_tag = sub_m.group(1).capitalize()
+            return f"Same {sub_tag}", f"Same {sub_tag}", None
+        return "Same", "Same", None
+
+    same_code_m = re.match(r'^(same|sane)[-_ ]+(dark|drk|up|lite|light|lt|down|dn|dull|bright|seq|sequins|sitara|tilla|\d+)$', raw_c, re.I)
+    if same_code_m:
+        sub_raw = same_code_m.group(2).lower()
+        if sub_raw in ("dark", "drk"):
+            sub_tag = "Dark"
+        elif sub_raw in ("lite", "light", "lt"):
+            sub_tag = "Lite"
+        elif sub_raw in ("down", "dn"):
+            sub_tag = "Down"
+        elif sub_raw in ("seq", "sequins", "sitara"):
+            sub_tag = "Seq"
+        else:
+            sub_tag = same_code_m.group(2).capitalize()
+        return f"Same {sub_tag}", f"Same {sub_tag}", None
+
     return raw_c, raw_n or raw_c, None
 
 
@@ -502,9 +536,42 @@ def parse_wilcom_pdf(file_bytes: bytes, filename: str) -> list[dict]:
         return parts_list
 
 
+def update_image_thread_colors(stitches: int, preset: str = "2_colors") -> list[dict]:
+    """
+    Generates realistic embroidery thread allocations based on stitch count and preset.
+    Standard factory metric: ~4.8 meters top thread per 1,000 stitches.
+    """
+    st_val = max(100, int(stitches))
+    total_top = round((st_val / 1000.0) * 4.8, 1)
+
+    if preset == "1_color_same":
+        return [
+            {"needle": 1, "code": "Same", "name": "Matching (Same Base)", "length_m": total_top}
+        ]
+    elif preset == "3_colors":
+        return [
+            {"needle": 1, "code": "Same", "name": "Matching (Same Base)", "length_m": round(total_top * 0.50, 1)},
+            {"needle": 2, "code": "3019", "name": "Resham Shade", "length_m": round(total_top * 0.30, 1)},
+            {"needle": 3, "code": "Sona", "name": "Sona Tilla", "length_m": round(total_top * 0.20, 1)}
+        ]
+    elif preset == "4_colors":
+        return [
+            {"needle": 1, "code": "Same", "name": "Matching (Same Base)", "length_m": round(total_top * 0.40, 1)},
+            {"needle": 2, "code": "3019", "name": "Resham Shade 1", "length_m": round(total_top * 0.25, 1)},
+            {"needle": 3, "code": "3156", "name": "Resham Shade 2", "length_m": round(total_top * 0.20, 1)},
+            {"needle": 4, "code": "Sona", "name": "Sona Tilla", "length_m": round(total_top * 0.15, 1)}
+        ]
+    else:
+        # Default: 2_colors (75% Same, 25% Tilla)
+        return [
+            {"needle": 1, "code": "Same", "name": "Matching (Same Base)", "length_m": round(total_top * 0.75, 1)},
+            {"needle": 2, "code": "Sona", "name": "Sona Tilla", "length_m": round(total_top * 0.25, 1)}
+        ]
+
+
 def parse_image_part(file_bytes: bytes, filename: str) -> dict:
     """
-    Parses an uploaded image safely and initializes a part entry.
+    Parses an uploaded image safely and initializes an editable part entry.
     """
     clean_name = sanitize_filename(filename)
     Image.MAX_IMAGE_PIXELS = 30000000  # Safe limit against decompression bombs
@@ -514,6 +581,12 @@ def parse_image_part(file_bytes: bytes, filename: str) -> dict:
     width, height = img.size
 
     base_name = clean_name.rsplit(".", 1)[0]
+
+    # Clean generic photo filenames like 'WhatsApp Image 2026-11-07 at 11.05.12 AM' or 'IMG_1234'
+    if re.search(r'^(?:whatsapp image|img_|screenshot|image|photo)\b', base_name, re.I):
+        display_name = "Part (Photo)"
+    else:
+        display_name = base_name
 
     # Auto-detect Repeat & Width from filename if present (e.g. 'W450', '450mm', 'Width 420')
     repeat = extract_repeat_from_text(base_name)
@@ -525,27 +598,29 @@ def parse_image_part(file_bytes: bytes, filename: str) -> dict:
 
     attrs = extract_part_attributes(base_name, repeat, width_mm)
 
+    default_st = 60000
+    total_top = round((default_st / 1000.0) * 4.8, 1)
+    total_bob = round((default_st / 1000.0) * 3.5, 1)
+
     return {
         "filename": clean_name,
-        "design_name": base_name,
+        "design_name": display_name,
         "repeat": repeat,
         "is_double_repeat": attrs["is_double_repeat"],
         "size_tag": attrs["size_tag"],
         "tag_heads": attrs["tag_heads"],
         "is_size_split": attrs["is_size_split"],
         "is_multi_color_repeat": attrs["is_multi_color_repeat"],
-        "stitches": 120000,  # sensible default for manual review
+        "stitches": default_st,
         "height_mm": 0.0,
         "width_mm": width_mm,
-        "total_bobbin_m": 150.0,
-        "total_thread_m": 570.0,
-        "raw_thread_usage": "570.0m",
+        "total_bobbin_m": total_bob,
+        "total_thread_m": total_top,
+        "raw_thread_usage": f"{total_top:.1f}m",
         "thread_unit": "m",
         "sequins_total": 0,
-        "thread_colors": [
-            {"needle": 1, "code": "same", "name": "same (Base Match)", "length_m": 450.0},
-            {"needle": 2, "code": "3357", "name": "Golden Zari", "length_m": 120.0}
-        ],
+        "color_preset": "2_colors",
+        "thread_colors": update_image_thread_colors(default_st, "2_colors"),
         "is_image": True,
         "image_bytes": file_bytes,
         "image_size": (width, height)

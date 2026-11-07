@@ -51,7 +51,7 @@ from core.config import (
     DEFAULT_BOBBIN_RATE_PER_METER
 )
 from core.security import validate_uploaded_file
-from core.parser import parse_wilcom_pdf, parse_image_part, extract_repeat_from_text, extract_dual_shade
+from core.parser import parse_wilcom_pdf, parse_image_part, update_image_thread_colors, extract_repeat_from_text, extract_dual_shade
 from core.pdf_report import generate_job_card_pdf
 from core.calculator import (
     aggregate_suit_parts,
@@ -1227,7 +1227,11 @@ if uploaded_files:
         ext = fname.lower().rsplit(".", 1)[-1]
         if not st.session_state.get("suit_design_name"):
             raw_nm = fname.rsplit(".", 1)[0]
-            st.session_state.suit_design_name = re.sub(r'[\(\[\{].*?[\)\]\}]', '', raw_nm).strip() or raw_nm.strip()
+            clean_raw = re.sub(r'[\(\[\{].*?[\)\]\}]', '', raw_nm).strip() or raw_nm.strip()
+            if re.search(r'^(?:whatsapp image|img_|screenshot|image|photo)\b', clean_raw, re.I):
+                st.session_state.suit_design_name = "Embroidery Design"
+            else:
+                st.session_state.suit_design_name = clean_raw
 
         # Feature 1: Auto-detect machine heads from file name if present
         h_match = re.search(r'(20|24|28|30|32|36|40|44|48|56)\s*(?:head|heads|h)', fname, re.I)
@@ -1303,6 +1307,10 @@ mode_keys = list(mode_options.keys())
 part_keys = list(st.session_state.parts.keys())
 to_delete = None
 
+has_any_image = any(p.get("is_image") for p in st.session_state.parts.values())
+if has_any_image:
+    st.info("💡 **Photo / Image Reference Mode:** Wilcom PDF mein stitches aur dhaaga automatic read hotay hain. Kyunki aap ne photo upload ki hai, is liye aap neeche apne design ke **Stitches (1R)** aur **Dhaaga Scheme** customize kar sakte hain. Poora hisaab live update hoga!")
+
 for p_key in part_keys:
     p = st.session_state.parts[p_key]
     dname = p.get("design_name", "Part")
@@ -1358,7 +1366,7 @@ for p_key in part_keys:
     hdr_badges = [
         f'<span class="badge-tag {b_type}">{b_badge}</span>',
         f'<strong style="font-size:1.02rem; font-weight:800; color:var(--text-primary);">{dname}</strong>',
-        f'<span style="font-family:\'JetBrains Mono\',monospace; color:var(--accent-amber); font-weight:800; font-size:0.88rem;">Wilcom: {st_raw:,} st</span>'
+        f'<span style="font-family:\'JetBrains Mono\',monospace; color:var(--accent-amber); font-weight:800; font-size:0.88rem;">{"Photo" if p.get("is_image") else "Wilcom"}: {st_raw:,} st</span>'
     ]
     if p_width > 0:
         if p_width > DOUBLE_HEAD_WIDTH_THRESHOLD_MM:
@@ -1388,6 +1396,56 @@ for p_key in part_keys:
     # Render Part Card
     with st.container():
         st.markdown(card_html, unsafe_allow_html=True)
+
+        if p.get("is_image"):
+            st.markdown(
+                '<div style="background:rgba(245,158,11,0.06); border:1.5px dashed var(--accent-amber); border-radius:8px; padding:10px 14px; margin-bottom:10px;">'
+                '<div style="font-size:0.83rem; font-weight:800; color:var(--accent-amber); margin-bottom:2px;">📸 Photo / Image Setup Controls</div>'
+                '<div style="font-size:0.75rem; color:var(--text-secondary);">Image se stitches automatic read nahi hotay. Neeche apne design ke Stitches aur Dhaaga Scheme set karein:</div>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            i_col_img, i_col_name, i_col_st, i_col_pre = st.columns([1.0, 2.2, 1.8, 2.2])
+            with i_col_img:
+                if p.get("image_bytes"):
+                    st.image(p["image_bytes"], use_container_width=True)
+            with i_col_name:
+                p_name_val = st.text_input("Part Name", value=p.get("design_name", "Part"), key=f"img_name_{p_key}")
+                if p_name_val != p.get("design_name"):
+                    p["design_name"] = p_name_val
+                    st.rerun()
+            with i_col_st:
+                cur_img_st = int(p.get("stitches", 60000))
+                p_st_val = st.number_input("Stitches (1R)", min_value=500, max_value=5000000, value=cur_img_st, step=5000, key=f"img_st_{p_key}")
+                if p_st_val != cur_img_st:
+                    p["stitches"] = p_st_val
+                    tot_top = round((p_st_val / 1000.0) * 4.8, 1)
+                    p["total_thread_m"] = tot_top
+                    p["total_bobbin_m"] = round((p_st_val / 1000.0) * 3.5, 1)
+                    p["raw_thread_usage"] = f"{tot_top:.1f}m"
+                    p["thread_colors"] = update_image_thread_colors(p_st_val, p.get("color_preset", "2_colors"))
+                    st.rerun()
+            with i_col_pre:
+                preset_labels = {
+                    "1_color_same": "1 Color (Matching Base)",
+                    "2_colors": "2 Colors (Matching + Tilla)",
+                    "3_colors": "3 Colors (Matching + 2 Shades)",
+                    "4_colors": "4 Colors (Multi-Color)"
+                }
+                cur_pre = p.get("color_preset", "2_colors")
+                pre_keys = list(preset_labels.keys())
+                pre_idx = pre_keys.index(cur_pre) if cur_pre in pre_keys else 1
+                p_pre_val = st.selectbox(
+                    "Dhaaga Scheme",
+                    options=pre_keys,
+                    format_func=lambda x: preset_labels[x],
+                    index=pre_idx,
+                    key=f"img_pre_{p_key}"
+                )
+                if p_pre_val != cur_pre:
+                    p["color_preset"] = p_pre_val
+                    p["thread_colors"] = update_image_thread_colors(int(p.get("stitches", 60000)), p_pre_val)
+                    st.rerun()
 
         c_col1, c_col2, c_col3, c_col4 = st.columns([3.8, 2.4, 3.3, 0.5])
 
@@ -1577,25 +1635,25 @@ def format_whatsapp_row(r) -> str:
     # Clean description from redundant "(Check: ...)" if present
     desc_clean = re.sub(r'\(Check:[^\)]+\)', '', desc).strip()
 
-    if not desc_clean or desc_clean.lower() == code.lower():
-        name_str = f"*{code}*"
+    if not desc_clean or desc_clean.lower() == code.lower() or desc_clean.lower() in ("none", "n/a", "-"):
+        label = code
     elif code.lower() in desc_clean.lower():
-        name_str = f"*{desc_clean}*"
+        label = desc_clean
     else:
-        name_str = f"*{code}* {desc_clean}"
+        label = f"{code} ({desc_clean})" if desc_clean else code
 
-    if chk and f"Check: {chk}" not in name_str:
-        name_str += f" (Check: {chk})"
+    chk_suffix = f" (Check: {chk})" if chk else ""
 
     if is_same:
         m_per = re.search(r'(\d+)\s*Cones', str(r.get("Per Color Cones", "")))
         per_note = f" ({m_per.group(1)}/color)" if m_per else ""
-        return f"• {name_str} [Same]: *{k_cones} Cones*{per_note}"
+        return f"• *{label}:* {k_cones} Cones{per_note}{chk_suffix}"
     else:
-        return f"• {name_str}: *{k_cones} Cones*"
+        return f"• *{label}:* {k_cones} Cones{chk_suffix}"
 
 
 # KPI Metric Cards Grid (Monochromatic Industrial Palette)
+lot_display_title = f"Total {lots_count:g} Lots" if lots_count > 1 else "Poori Lot"
 st.markdown(f"""
 <div class="kpi-grid">
     <div class="kpi-card featured">
@@ -1609,7 +1667,7 @@ st.markdown(f"""
         <div class="kpi-subtext">Stitch Rate: Rs {stitch_rate:.2f} / 1k st</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-label">📦 Poori Lot ka Bill</div>
+        <div class="kpi-label">📦 {lot_display_title} ka Bill</div>
         <div class="kpi-value">Rs {total_order_amount:,.0f}</div>
         <div class="kpi-subtext">{num_pieces} Suits ({lots_count:g} Lots)</div>
     </div>
@@ -1768,15 +1826,15 @@ with tab_store:
         st.markdown(table_html, unsafe_allow_html=True)
 
         # WhatsApp simple dhaaga order text (Sirf Dhaaga & Cones)
+        b_clean_clr = "White" if "white" in b_clr_label.lower() else ("Black" if "black" in b_clr_label.lower() else b_clr_label.split()[0])
+        lot_txt = f"({lots_count:g} Lots)" if lots_count > 1 else "(1 Lot)"
         store_summary_text = f"🧵 *DHAAGA ORDER — {raw_design_name}*\n"
-        store_summary_text += f"📦 Order: *{num_pieces} Suits* ({lots_count:g} Lots)\n"
-        store_summary_text += "────────────────────────\n"
+        store_summary_text += f"Order: *{num_pieces} Suits* {lot_txt}\n\n"
         for _, r in df_cones.iterrows():
             store_summary_text += f"{format_whatsapp_row(r)}\n"
-        store_summary_text += "────────────────────────\n"
-        store_summary_text += f"🧵 *Kul Dhaaga Cones:* *{total_order_cones} Cones*\n"
+        store_summary_text += f"\n*Total Dhaaga:* *{total_order_cones} Cones*\n"
         if bobbin_cones > 0:
-            store_summary_text += f"🧵 *Bobbin/Khicha ({b_clr_label})*: *{bobbin_cones} Cones* (~{bobbin_kg:.1f} kg)"
+            store_summary_text += f"*Bobbin:* *{bobbin_cones} Cones* ({b_clean_clr})"
 
         wa_encoded = urllib.parse.quote(store_summary_text)
         wa_direct_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
@@ -1996,7 +2054,7 @@ with tab_costing:
 <tr>
 <th>Item / Madad</th>
 <th style="text-align:right;">1 Suit Laagat</th>
-<th style="text-align:right;">Poori Lot ({num_pieces} Suits)</th>
+<th style="text-align:right;">{lot_display_title} ({num_pieces} Suits)</th>
 </tr>
 </thead>
 <tbody>
@@ -2040,7 +2098,7 @@ with tab_costing:
         st.markdown(f"""<div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:9px; padding:14px; box-shadow:var(--card-shadow); margin-bottom:12px;">
 <div style="font-size:0.86rem; font-weight:800; text-transform:uppercase; color:var(--accent-amber); margin-bottom:8px;">💰 Munafa Summary Card</div>
 <div style="background:var(--bg-surface-elevated); border:1.5px solid var(--accent-amber); border-radius:8px; padding:14px; text-align:center; margin-bottom:12px;">
-    <div style="font-size:0.75rem; color:var(--text-muted); font-weight:800; text-transform:uppercase;">Poori Lot ka Saaf Munafa</div>
+    <div style="font-size:0.75rem; color:var(--text-muted); font-weight:800; text-transform:uppercase;">{lot_display_title} ka Saaf Munafa</div>
     <div style="font-size:2rem; font-weight:900; font-family:'JetBrains Mono',monospace; color:var(--accent-amber); margin:4px 0;">Rs {total_order_profit:,.0f}</div>
     <div style="font-size:0.8rem; font-weight:700; color:var(--text-secondary);">{num_pieces} Suits @ Rs {net_profit_per_suit:,.2f} / Suit</div>
 </div>

@@ -236,12 +236,13 @@ def aggregate_suit_parts(
 
             clean_code, clean_name, check_c = extract_dual_shade(raw_code, raw_name)
             final_check = tc.get("check_code") or check_c
-            if check_c:
+            if clean_code != raw_code or clean_name != raw_name or check_c:
                 raw_code = clean_code
                 raw_name = clean_name
                 tc["code"] = clean_code
                 tc["name"] = clean_name
-                tc["check_code"] = check_c
+                if check_c:
+                    tc["check_code"] = check_c
 
             part_suit_m = length_single * cfg["rate_st_mult"]
             part_frame_m = length_single * cfg["thread_heads"] * cfg["repeat"]
@@ -290,6 +291,7 @@ def aggregate_suit_parts(
 
                 colors_dict[target_key] = {
                     "needle": needle,
+                    "needle_meters": {needle: part_suit_m},
                     "code": display_code,
                     "name": display_name,
                     "check_code": final_check,
@@ -312,12 +314,21 @@ def aggregate_suit_parts(
                 if not colors_dict[target_key].get("check_code") and final_check:
                     colors_dict[target_key]["check_code"] = final_check
 
+                if "needle_meters" not in colors_dict[target_key]:
+                    colors_dict[target_key]["needle_meters"] = {colors_dict[target_key]["needle"]: colors_dict[target_key]["meters_1_suit"]}
+                colors_dict[target_key]["needle_meters"][needle] = colors_dict[target_key]["needle_meters"].get(needle, 0.0) + part_suit_m
+
             colors_dict[target_key]["meters_1_suit"] += part_suit_m
             colors_dict[target_key]["meters_1_frame"] += part_frame_m
             colors_dict[target_key]["active_heads"] = max(
                 colors_dict[target_key]["active_heads"],
                 cfg["heads"]
             )
+
+    # Resolve dominant needle (needle with the highest meter usage across suit parts)
+    for k, info in colors_dict.items():
+        if "needle_meters" in info and info["needle_meters"]:
+            info["needle"] = max(info["needle_meters"], key=info["needle_meters"].get)
 
     return total_suit_stitches, total_suit_sequins, total_suit_bobbin_m, colors_dict
 
@@ -400,7 +411,8 @@ def calculate_full_production(
             total_order_cones_int += int_cones_order
             total_order_cones_exact += exact_cones_order
 
-            formula_note = f"Poori Lot ({num_pieces} suits) = {int_cones_order} Cones{chk_suffix}"
+            lot_label = f"Total {lots_count:g} Lots" if lots_count > 1 else "Poori Lot"
+            formula_note = f"{lot_label} ({num_pieces} suits) = {int_cones_order} Cones{chk_suffix}"
 
             cone_rows.append({
                 "Needle": info["needle"],
@@ -412,7 +424,7 @@ def calculate_full_production(
                 "1 Suit (m)": round(m_1_suit, 1),
                 "1 Frame (m)": round(m_1_frame, 0),
                 "Cones / Suit": round(cones_per_suit, 4),
-                "Per Color Cones": "— (Poori Lot)",
+                "Per Color Cones": f"— ({lot_label})",
                 "Kul Cones (🧵)": int_cones_order,
                 "Formula / Note": formula_note
             })

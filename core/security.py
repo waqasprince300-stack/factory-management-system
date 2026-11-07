@@ -43,8 +43,21 @@ def validate_uploaded_file(file_bytes: bytes, filename: str) -> tuple[bool, str]
         if not file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
             return False, "Corrupted PNG image file."
     elif ext in {".jpg", ".jpeg"}:
-        if not file_bytes.startswith(b"\xff\xd8\xff"):
+        if not file_bytes.startswith(b"\xff\xd8"):
             return False, "Corrupted JPEG image file."
+    elif ext in {".webp"}:
+        if not (file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP"):
+            return False, "Corrupted WEBP image file."
+
+    # Validate image integrity with PIL
+    if ext in {".png", ".jpg", ".jpeg", ".webp"}:
+        try:
+            import io
+            from PIL import Image
+            im = Image.open(io.BytesIO(file_bytes))
+            im.verify()
+        except Exception:
+            return False, "Image file corrupted ya unreadable hai."
 
     return True, ""
 
